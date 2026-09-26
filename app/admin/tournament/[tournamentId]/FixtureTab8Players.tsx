@@ -50,6 +50,18 @@ type Tournament = {
   >;
 };
 
+type Registration = {
+  id: string;
+  userId: string;
+  username?: string;
+  eFootballUsername?: string;
+  profilePhoto?: string;
+  status?: string;
+  createdAt?: {
+    seconds?: number;
+  };
+};
+
 type SavedScore = {
   p1Score: number;
   p2Score: number;
@@ -216,24 +228,27 @@ export default function FixtureTab8Players({
           registrationsQuery
         );
 
-      const confirmedRegistrations =
-        registrationSnap.docs
-          .map((item) => ({
-            id: item.id,
-            ...item.data(),
-          }))
-          .filter((item: any) => {
-            return item.status === "confirmed";
-          })
-          .sort((a: any, b: any) => {
-            const aTime =
-              a.createdAt?.seconds || 0;
+      const confirmedRegistrations: Registration[] =
+  registrationSnap.docs
+    .map(
+      (item) =>
+        ({
+          id: item.id,
+          ...item.data(),
+        }) as Registration
+    )
+    .filter((item) => {
+      return item.status === "confirmed";
+    })
+    .sort((a, b) => {
+      const aTime =
+        a.createdAt?.seconds || 0;
 
-            const bTime =
-              b.createdAt?.seconds || 0;
+      const bTime =
+        b.createdAt?.seconds || 0;
 
-            return aTime - bTime;
-          });
+      return aTime - bTime;
+    });
 
       const loadedPlayers: Player[] = [];
 
@@ -1003,14 +1018,23 @@ export default function FixtureTab8Players({
                 userId ===
                 runnerId;
 
-              const currentData =
-                user.userSnap.exists()
-                  ? user.userSnap.data()
-                  : {};
+              const currentData = user.userSnap.exists()
+  ? (user.userSnap.data() as {
+      tournamentStats?: {
+        goals?: number;
+        conceded?: number;
+        wins?: number;
+        losses?: number;
+        matches?: number;
+        tournamentPlayed?: number;
+        tournamentWon?: number;
+        tournamentRunner?: number;
+      };
+    })
+  : {};
 
-              const currentStats =
-                currentData?.tournamentStats ||
-                {};
+const currentStats =
+  currentData.tournamentStats || {};
 
               const nextStats = {
                 ...currentStats,

@@ -52,6 +52,18 @@ type Tournament = {
   >;
 };
 
+type Registration = {
+  id: string;
+  userId: string;
+  username?: string;
+  eFootballUsername?: string;
+  profilePhoto?: string;
+  status?: string;
+  createdAt?: {
+    seconds?: number;
+  };
+};
+
 type SavedScore = {
   p1Score: number;
   p2Score: number;
@@ -376,15 +388,15 @@ export default function FixtureTab({
 
       const registrationSnap = await getDocs(registrationsQuery);
 
-      const confirmedRegistrations = registrationSnap.docs
-        .map((item) => ({
-          id: item.id,
-          ...item.data(),
-        }))
-        .filter((item: any) => {
-          return item.status === "confirmed";
-        })
-        .sort((a: any, b: any) => {
+      const confirmedRegistrations: Registration[] = registrationSnap.docs
+  .map((item) => ({
+    id: item.id,
+    ...item.data(),
+  }) as Registration)
+        .filter((item) => {
+  return item.status === "confirmed";
+})
+.sort((a, b) => {
           const aTime = a.createdAt?.seconds || 0;
           const bTime = b.createdAt?.seconds || 0;
           return aTime - bTime;

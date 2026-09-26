@@ -427,75 +427,48 @@ export default function TournamentDetailsPage() {
   }, [tournament]);
 
   async function handleJoin() {
-    if (!tournament || joining) {
-      return;
-    }
+  if (!tournament || joining) {
+    return;
+  }
 
-    if (isFull || isClosed) {
-      return;
-    }
+  if (isFull || isClosed) {
+    return;
+  }
 
-    setJoining(true);
+  setJoining(true);
 
-    try {
-      /*
-       * If user is not logged in,
-       * send them to login first.
-       *
-       * After login they can come back
-       * to this tournament.
-       */
-      if (!isLoggedIn) {
-        router.push(
-          `/login?redirect=/tournament/${tournament.id}`
-        );
-
-        return;
-      }
-
-      /*
-       * Existing join/payment page.
-       */
-      const params =
-        new URLSearchParams();
-
-      params.set(
-        "tournament",
-        tournament.id
-      );
-
-      params.set(
-        "date",
-        tournament.date
-      );
-
-      params.set(
-        "time",
-        tournament.time
-      );
-
-      params.set(
-        "entryFee",
-        String(tournament.entryFee)
-      );
-
-      params.set(
-        "format",
-        tournament.category
-      );
-
-      params.set(
-        "coins",
-        String(tournament.coins)
-      );
+  try {
+    /*
+     * If user is not logged in,
+     * send them to login first.
+     */
+    if (!isLoggedIn) {
+      const redirectUrl =
+        `/tournament/join?tournamentId=${encodeURIComponent(
+          tournament.id
+        )}`;
 
       router.push(
-        `/tournament/join?${params.toString()}`
+        `/login?redirect=${encodeURIComponent(
+          redirectUrl
+        )}`
       );
-    } finally {
-      setJoining(false);
+
+      return;
     }
+
+    /*
+     * Open join page with the tournament ID.
+     */
+    router.push(
+      `/tournament/join?tournamentId=${encodeURIComponent(
+        tournament.id
+      )}`
+    );
+  } finally {
+    setJoining(false);
   }
+}
 
   if (loading) {
     return (
