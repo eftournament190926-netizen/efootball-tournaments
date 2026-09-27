@@ -1,26 +1,18 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   collection,
   doc,
   getDoc,
   getDocs,
-  increment,
   query,
   serverTimestamp,
   where,
-  writeBatch,
+  addDoc,
 } from "firebase/firestore";
-import {
-  onAuthStateChanged,
-  User,
-} from "firebase/auth";
-import {
-  useRouter,
-  useSearchParams,
-} from "next/navigation";
-
+import { onAuthStateChanged, User } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 
 type Tournament = {
@@ -51,29 +43,36 @@ function getTournamentImage(coins: number) {
   return `/images/${coins}.png`;
 }
 
+/* --------------------------------
+   Generate 6 Character Join Code
+--------------------------------- */
+
+function generateJoinCode(length = 6) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+  const randomValues = new Uint32Array(length);
+
+  crypto.getRandomValues(randomValues);
+
+  let code = "";
+
+  for (let i = 0; i < length; i++) {
+    code += chars[randomValues[i] % chars.length];
+  }
+
+  return code;
+}
+
 function JoinTournamentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  /*
-   * Tournament ID comes from:
-   * /tournament/join?tournament=XXXXXXXX
-   *
-   * or:
-   * /tournament/join?tournamentId=XXXXXXXX
-   */
   const tournamentId =
-    (
-      searchParams.get("tournamentId") ||
-      searchParams.get("tournament") ||
-      ""
-    ).trim();
+    searchParams.get("tournamentId") ||
+    searchParams.get("tournament");
 
-  const [authUser, setAuthUser] =
-    useState<User | null>(null);
-
-  const [authLoading, setAuthLoading] =
-    useState(true);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   const [userProfile, setUserProfile] =
     useState<UserProfile | null>(null);
@@ -81,112 +80,76 @@ function JoinTournamentContent() {
   const [tournament, setTournament] =
     useState<Tournament | null>(null);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
+  const [joining, setJoining] = useState(false);
 
-  const [joining, setJoining] =
-    useState(false);
+  const [error, setError] = useState("");
+  const [alreadyJoined, setAlreadyJoined] = useState(false);
 
-  const [error, setError] =
-    useState("");
+  /* --------------------------------
+     Auth Listener
+  --------------------------------- */
 
-  const [alreadyJoined, setAlreadyJoined] =
-    useState(false);
-
-  /*
-   * Auth listener
-   */
   useEffect(() => {
-    const unsubscribe =
-      onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (user) => {
         setAuthUser(user);
         setAuthLoading(false);
-      });
+      }
+    );
 
     return () => unsubscribe();
   }, []);
 
-  /*
-   * Load tournament + user
-   */
+  /* --------------------------------
+     Load Tournament + User Profile
+  --------------------------------- */
+
   useEffect(() => {
-    if (authLoading) {
-      return;
-    }
+    if (authLoading) return;
 
-    if (!tournamentId) {
-      setError(
-        "Tournament ID is missing."
-      );
-      setLoading(false);
-      return;
-    }
-
-    // 1. ഇവിടെ authUser ഇല്ലെങ്കിൽ റിട്ടേൺ ചെയ്യുന്നു
     if (!authUser) {
       setLoading(false);
       return;
     }
 
-    // 2. TypeScript Type Narrowing നിലനിർത്താൻ local variable-ലേക്ക് സ്റ്റോർ ചെയ്യുന്നു
-    const currentAuthUser = authUser;
+    if (!tournamentId) {
+      setLoading(false);
+      setError("Tournament not found.");
+      return;
+    }
 
-    let cancelled = false;
-
-    async function loadData() {
+    const loadData = async () => {
       try {
         setLoading(true);
         setError("");
 
-        console.log(
-          "JOIN TOURNAMENT ID:",
-          tournamentId
-        );
+        /* --------------------------------
+           Tournament
+        --------------------------------- */
 
-        console.log(
-          "FIRESTORE PATH:",
-          `tournaments/${tournamentId}`
-        );
-
-        /*
-         * Load tournament
-         */
         const tournamentRef = doc(
           db,
           "tournaments",
           tournamentId
         );
 
-        const tournamentSnapshot =
-          await getDoc(tournamentRef);
-
-        console.log(
-          "DOCUMENT EXISTS:",
-          tournamentSnapshot.exists()
+        const tournamentSnap = await getDoc(
+          tournamentRef
         );
 
-        if (!tournamentSnapshot.exists()) {
-          if (!cancelled) {
-            setTournament(null);
-
-            setError(
-              `Tournament not found. ID: ${tournamentId}`
-            );
-          }
-
+        if (!tournamentSnap.exists()) {
+          setError("Tournament not found.");
+          setTournament(null);
           return;
         }
 
         const tournamentData =
-          tournamentSnapshot.data();
+          tournamentSnap.data();
 
-        console.log(
-          "TOURNAMENT DATA:",
-          tournamentData
-        );
-
-        const loadedTournament: Tournament = {
-          id: tournamentSnapshot.id,
+        setTournament({
+          id: tournamentSnap.id,
 
           coins: Number(
             tournamentData.coins || 0
@@ -217,71 +180,198 @@ function JoinTournamentContent() {
           ),
 
           status: String(
-            tournamentData.status ||
-              "upcoming"
+            tournamentData.status || ""
           ),
 
           roomCode:
-            tournamentData.roomCode || "",
+            tournamentData.roomCode,
 
           roomCodeA:
-            tournamentData.roomCodeA || "",
+            tournamentData.roomCodeA,
 
           roomCodeB:
-            tournamentData.roomCodeB || "",
+            tournamentData.roomCodeB,
 
           finalRoomCode:
-            tournamentData.finalRoomCode || "",
-        };
+            tournamentData.finalRoomCode,
+        });
 
-        /*
-         * Load user profile (ഇവിടെ currentAuthUser.uid ഉപയോഗിക്കുക)
-         */
+        /* --------------------------------
+           User Profile
+        --------------------------------- */
+
         const userRef = doc(
           db,
           "users",
-          currentAuthUser.uid
+          authUser.uid
         );
 
-        const userSnapshot =
-          await getDoc(userRef);
+        const userSnap = await getDoc(userRef);
 
-        if (!userSnapshot.exists()) {
-          if (!cancelled) {
-            setError(
-              "Your profile was not found."
-            );
-          }
-
+        if (!userSnap.exists()) {
+          setError("User profile not found.");
+          setUserProfile(null);
           return;
         }
 
         const userData =
-          userSnapshot.data();
+          userSnap.data();
 
-        const loadedProfile: UserProfile = {
-          uid: currentAuthUser.uid,
+        setUserProfile({
+          uid: authUser.uid,
 
-          username:
-            userData.username ||
-            "Player",
+          username: String(
+            userData.username || ""
+          ),
 
-          konamiId:
-            userData.konamiId || "",
+          konamiId: String(
+            userData.konamiId || ""
+          ),
 
-          email:
+          email: String(
             userData.email ||
-            currentAuthUser.email ||
-            "",
+              authUser.email ||
+              ""
+          ),
 
           profilePhoto:
             userData.profilePhoto || "",
-        };
+        });
+
+        /* --------------------------------
+           Check Existing Registration
+        --------------------------------- */
+
+        const registrationQuery =
+          query(
+            collection(
+              db,
+              "tournamentRegistrations"
+            ),
+            where(
+              "tournamentId",
+              "==",
+              tournamentId
+            ),
+            where(
+              "userId",
+              "==",
+              authUser.uid
+            )
+          );
+
+        const registrationSnapshot =
+          await getDocs(
+            registrationQuery
+          );
 
         /*
-         * Check existing registration (ഇവിടെയും currentAuthUser.uid ഉപയോഗിക്കുക)
+         * Only CONFIRMED registration
+         * should show "Already Booked".
+         *
+         * Pending registration can continue
+         * to Verify page.
          */
-        const existingQuery = query(
+
+        const confirmedRegistration =
+          registrationSnapshot.docs.find(
+            (registrationDoc) => {
+              const data =
+                registrationDoc.data();
+
+              return (
+                data.status === "confirmed"
+              );
+            }
+          );
+
+        setAlreadyJoined(
+          !!confirmedRegistration
+        );
+      } catch (err) {
+        console.error(err);
+
+        setError(
+          "Something went wrong while loading tournament."
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [
+    authUser,
+    authLoading,
+    tournamentId,
+  ]);
+
+  /* --------------------------------
+     Handle Join
+  --------------------------------- */
+
+  const handleJoin = async () => {
+    if (joining) return;
+
+    if (!authUser) {
+      setError("Please login first.");
+      return;
+    }
+
+    if (!userProfile) {
+      setError("User profile not found.");
+      return;
+    }
+
+    if (!tournament) {
+      setError("Tournament not found.");
+      return;
+    }
+
+    try {
+      setJoining(true);
+      setError("");
+
+      /* --------------------------------
+         Tournament Status
+      --------------------------------- */
+
+      const currentStatus =
+        tournament.status.toLowerCase();
+
+      if (
+        currentStatus === "cancelled" ||
+        currentStatus === "completed" ||
+        currentStatus === "closed"
+      ) {
+        setError(
+          "This tournament is no longer available."
+        );
+
+        return;
+      }
+
+      /* --------------------------------
+         Full Check
+      --------------------------------- */
+
+      if (
+        tournament.registeredPlayers >=
+        tournament.maxPlayers
+      ) {
+        setError(
+          "This tournament is already full."
+        );
+
+        return;
+      }
+
+      /* --------------------------------
+         Check Existing Registration
+      --------------------------------- */
+
+      const existingQuery =
+        query(
           collection(
             db,
             "tournamentRegistrations"
@@ -289,349 +379,208 @@ function JoinTournamentContent() {
           where(
             "tournamentId",
             "==",
-            tournamentId
+            tournament.id
           ),
           where(
             "userId",
             "==",
-            currentAuthUser.uid
+            authUser.uid
           )
         );
 
-        const existingSnapshot =
-          await getDocs(existingQuery);
-
-        if (!cancelled) {
-          setTournament(
-            loadedTournament
-          );
-
-          setUserProfile(
-            loadedProfile
-          );
-
-          setAlreadyJoined(
-            !existingSnapshot.empty
-          );
-        }
-      } catch (err) {
-        console.error(
-          "FAILED TO LOAD JOIN PAGE:",
-          err
-        );
-
-        if (!cancelled) {
-          setError(
-            "Something went wrong. Please try again."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadData();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    authLoading,
-    authUser,
-    tournamentId,
-  ]);
-
-  /*
-   * Join tournament
-   */
-  async function handleJoin() {
-    // 1. Capture state in local variable to preserve TypeScript type safety across async operations
-    const currentAuthUser = authUser;
-
-    if (
-      joining ||
-      !currentAuthUser ||
-      !userProfile ||
-      !tournament
-    ) {
-      return;
-    }
-
-    setError("");
-
-    /*
-     * Check tournament status
-     */
-    if (
-      tournament.status === "cancelled" ||
-      tournament.status === "completed" ||
-      tournament.status === "closed"
-    ) {
-      setError(
-        "This tournament is no longer available."
-      );
-
-      return;
-    }
-
-    /*
-     * Check full
-     */
-    if (
-      tournament.registeredPlayers >=
-      tournament.maxPlayers
-    ) {
-      setError(
-        "This tournament is full."
-      );
-
-      return;
-    }
-
-    /*
-     * Check already joined
-     */
-    if (alreadyJoined) {
-      setError(
-        "You have already joined this tournament."
-      );
-
-      return;
-    }
-
-    try {
-      setJoining(true);
-
-      /*
-       * Fresh tournament check
-       */
-      const tournamentRef = doc(
-        db,
-        "tournaments",
-        tournament.id
-      );
-
-      const freshTournamentSnapshot =
-        await getDoc(tournamentRef);
-
-      if (
-        !freshTournamentSnapshot.exists()
-      ) {
-        setError(
-          "Tournament no longer exists."
-        );
-
-        return;
-      }
-
-      const freshTournament =
-        freshTournamentSnapshot.data();
-
-      const currentPlayers =
-        Number(
-          freshTournament.registeredPlayers ||
-            0
-        );
-
-      const maxPlayers =
-        Number(
-          freshTournament.maxPlayers ||
-            0
-        );
-
-      if (
-        currentPlayers >= maxPlayers
-      ) {
-        setError(
-          "Tournament is already full."
-        );
-
-        return;
-      }
-
-      /*
-       * Duplicate check
-       */
-      const duplicateQuery = query(
-        collection(
-          db,
-          "tournamentRegistrations"
-        ),
-        where(
-          "tournamentId",
-          "==",
-          tournament.id
-        ),
-        where(
-          "userId",
-          "==",
-          currentAuthUser.uid
-        )
-      );
-
-      const duplicateSnapshot =
+      const existingSnapshot =
         await getDocs(
-          duplicateQuery
+          existingQuery
         );
 
-      if (
-        !duplicateSnapshot.empty
-      ) {
+      /*
+       * If confirmed:
+       * Don't allow another booking.
+       */
+
+      const confirmedRegistration =
+        existingSnapshot.docs.find(
+          (registrationDoc) => {
+            const data =
+              registrationDoc.data();
+
+            return (
+              data.status === "confirmed"
+            );
+          }
+        );
+
+      if (confirmedRegistration) {
         setAlreadyJoined(true);
 
         setError(
-          "You have already joined this tournament."
+          "You already have a confirmed booking for this tournament."
         );
 
         return;
       }
 
       /*
-       * Create registration
+       * If pending:
+       * Continue to the existing Verify page.
        */
-      const registrationRef = doc(
-        collection(
-          db,
-          "tournamentRegistrations"
-        )
-      );
 
-      const batch =
-        writeBatch(db);
+      const pendingRegistration =
+        existingSnapshot.docs.find(
+          (registrationDoc) => {
+            const data =
+              registrationDoc.data();
 
-      batch.set(
-        registrationRef,
-        {
-          tournamentId:
-            tournament.id,
+            return (
+              data.status === "pending"
+            );
+          }
+        );
 
-          userId:
-            currentAuthUser.uid,
+      if (pendingRegistration) {
+        router.push(
+          `/tournament/verify?bookingId=${encodeURIComponent(
+            pendingRegistration.id
+          )}`
+        );
 
-          username:
-            userProfile.username,
+        return;
+      }
 
-          profilePhoto:
-            userProfile.profilePhoto ||
-            "",
+      /* --------------------------------
+         Generate Join Code
+      --------------------------------- */
 
-          konamiId:
-            userProfile.konamiId,
+      const joinCode =
+        generateJoinCode(6);
 
-          email:
-            userProfile.email,
+      /* --------------------------------
+         Create Pending Registration
+      --------------------------------- */
 
-          tournamentPoints:
-            tournament.coins,
+      const registrationRef =
+        await addDoc(
+          collection(
+            db,
+            "tournamentRegistrations"
+          ),
+          {
+            tournamentId:
+              tournament.id,
 
-          category:
-            tournament.category,
+            userId:
+              authUser.uid,
 
-          date:
-            tournament.date,
+            username:
+              userProfile.username,
 
-          time:
-            tournament.time,
+            profilePhoto:
+              userProfile.profilePhoto ||
+              "",
 
-          entryFee:
-            tournament.entryFee,
+            konamiId:
+              userProfile.konamiId,
 
-          rewardCoins:
-            tournament.coins,
+            email:
+              userProfile.email,
 
-          status:
-            "confirmed",
+            tournamentPoints:
+              tournament.coins,
 
-          createdAt:
-            serverTimestamp(),
+            category:
+              tournament.category,
 
-          updatedAt:
-            serverTimestamp(),
-        }
-      );
+            date:
+              tournament.date,
 
-      /*
-       * Increase player count on tournament document
-       */
-      batch.update(
-        tournamentRef,
-        {
-          registeredPlayers:
-            increment(1),
+            time:
+              tournament.time,
 
-          updatedAt:
-            serverTimestamp(),
-        }
-      );
+            entryFee:
+              tournament.entryFee,
 
-      await batch.commit();
+            rewardCoins:
+              tournament.coins,
 
-      /*
-       * Success page
-       */
+            /* Booking starts as pending */
+
+            status:
+              "pending",
+
+            paymentStatus:
+              "pending",
+
+            /* Verification code */
+
+            joinCode:
+              joinCode,
+
+            createdAt:
+              serverTimestamp(),
+
+            updatedAt:
+              serverTimestamp(),
+          }
+        );
+
+      /* --------------------------------
+         Go To Verify Page
+      --------------------------------- */
+
       router.push(
-        `/tournament/payment-success?tournament=${encodeURIComponent(
-          tournament.id
+        `/tournament/verify?bookingId=${encodeURIComponent(
+          registrationRef.id
         )}`
       );
     } catch (err) {
-      console.error(
-        "TOURNAMENT JOIN FAILED:",
-        err
-      );
+      console.error(err);
 
       setError(
-        "Unable to join tournament. Please try again."
+        "Unable to create your booking. Please try again."
       );
     } finally {
       setJoining(false);
     }
-  }
+  };
 
-  /*
-   * Loading
-   */
-  if (
-    loading ||
-    authLoading
-  ) {
+  /* --------------------------------
+     Loading
+  --------------------------------- */
+
+  if (authLoading || loading) {
     return (
       <PageFrame>
-        <div className="flex min-h-screen items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-[#4bd17b] border-t-transparent" />
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="text-sm text-white/60">
+            Loading tournament...
+          </div>
         </div>
       </PageFrame>
     );
   }
 
-  /*
-   * Login required
-   */
+  /* --------------------------------
+     Login Required
+  --------------------------------- */
+
   if (!authUser) {
     return (
       <PageFrame>
-        <div className="flex min-h-screen items-center justify-center px-6">
-          <div className="w-full text-center">
-            <div className="text-[24px] font-black text-[#111111]">
+        <div className="mx-auto flex min-h-[60vh] max-w-md items-center justify-center px-4">
+          <div className="w-full rounded-2xl border border-white/10 bg-white/[0.04] p-6 text-center">
+            <h2 className="text-xl font-semibold text-white">
               Login Required
-            </div>
+            </h2>
 
-            <p className="mt-2 text-[14px] font-medium text-[#777777]">
-              Please login before joining a tournament.
+            <p className="mt-2 text-sm text-white/60">
+              Please login to join this tournament.
             </p>
 
             <button
-              type="button"
               onClick={() =>
-                router.push(
-                  `/login?redirect=${encodeURIComponent(
-                    `/tournament/join?tournamentId=${tournamentId}`
-                  )}`
-                )
+                router.push("/login")
               }
-              className="mt-6 w-full rounded-[10px] bg-[#4bd17b] py-3 text-[17px] font-black text-[#111111]"
+              className="mt-6 w-full rounded-xl bg-white px-4 py-3 font-semibold text-black transition hover:bg-white/90"
             >
               Login
             </button>
@@ -641,31 +590,23 @@ function JoinTournamentContent() {
     );
   }
 
-  /*
-   * Tournament/profile missing
-   */
-  if (
-    !tournament ||
-    !userProfile
-  ) {
+  /* --------------------------------
+     Missing Data
+  --------------------------------- */
+
+  if (!tournament || !userProfile) {
     return (
       <PageFrame>
-        <div className="flex min-h-screen items-center justify-center px-6">
-          <div className="text-center">
-            <div className="text-[21px] font-black text-[#111111]">
+        <div className="mx-auto flex min-h-[60vh] max-w-md items-center justify-center px-4">
+          <div className="w-full rounded-2xl border border-red-500/20 bg-red-500/10 p-6 text-center">
+            <h2 className="text-xl font-semibold text-white">
+              Unable to Load
+            </h2>
+
+            <p className="mt-2 text-sm text-white/60">
               {error ||
                 "Something went wrong."}
-            </div>
-
-            <button
-              type="button"
-              onClick={() =>
-                router.back()
-              }
-              className="mt-5 rounded-[10px] bg-[#4bd17b] px-6 py-3 text-[16px] font-black text-[#111111]"
-            >
-              Go Back
-            </button>
+            </p>
           </div>
         </div>
       </PageFrame>
@@ -677,62 +618,79 @@ function JoinTournamentContent() {
     tournament.maxPlayers;
 
   const isClosed =
-    tournament.status ===
+    tournament.status.toLowerCase() ===
       "cancelled" ||
-    tournament.status ===
+    tournament.status.toLowerCase() ===
       "completed" ||
-    tournament.status ===
+    tournament.status.toLowerCase() ===
       "closed";
 
   return (
     <PageFrame>
-      {/* Header */}
-      <div className="sticky top-0 z-20 flex h-[56px] items-center border-b border-[#e8e8e8] bg-white px-4">
-        <button
-          type="button"
-          onClick={() =>
-            router.back()
-          }
-          className="flex h-9 w-9 items-center justify-center text-[28px] font-light leading-none text-[#111111]"
-          aria-label="Go back"
-        >
-          ‹
-        </button>
+      <div className="mx-auto max-w-3xl px-4 py-6">
 
-        <div className="flex-1 text-center">
-          <div className="text-[18px] font-black text-[#111111]">
+        {/* --------------------------------
+            Header
+        --------------------------------- */}
+
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-white">
             Join Tournament
-          </div>
+          </h1>
+
+          <p className="mt-1 text-sm text-white/50">
+            Confirm your details and reserve
+            your tournament booking.
+          </p>
         </div>
 
-        <div className="w-9" />
-      </div>
+        {/* --------------------------------
+            Tournament Image
+        --------------------------------- */}
 
-      <div className="px-4 pb-8 pt-4">
-        {/* Tournament image */}
-        <div className="overflow-hidden rounded-[16px] bg-[#f2f2f2]">
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]">
           <img
             src={getTournamentImage(
               tournament.coins
             )}
-            alt={`${tournament.coins} coins tournament`}
-            className="block w-full object-cover"
+            alt={`${tournament.coins} Coins Tournament`}
+            className="h-56 w-full object-cover"
           />
         </div>
 
-        {/* Tournament info */}
-        <div className="mt-4 rounded-[16px] bg-[#f5f5f5] p-4">
-          <div className="text-center">
-            <div className="text-[25px] font-black leading-none text-[#111111]">
-              {tournament.time}
+        {/* --------------------------------
+            Tournament Info
+        --------------------------------- */}
+
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-wider text-white/40">
+                Tournament
+              </p>
+
+              <h2 className="mt-1 text-xl font-semibold text-white">
+                {tournament.coins} Coins
+              </h2>
             </div>
 
-            <div className="mt-2 text-[13px] font-bold text-[#888888]">
-              {tournament.date}
+            <div className="rounded-xl bg-white/10 px-3 py-2 text-sm font-medium text-white">
+              {tournament.category}
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-3">
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+
+            <InfoItem
+              label="Time"
+              value={tournament.time}
+            />
+
+            <InfoItem
+              label="Date"
+              value={tournament.date}
+            />
+
             <InfoItem
               label="Entry Fee"
               value={`₹${tournament.entryFee}`}
@@ -743,128 +701,160 @@ function JoinTournamentContent() {
               value={`${tournament.registeredPlayers}/${tournament.maxPlayers}`}
             />
 
-            <InfoItem
-              label="Prize"
-              value={`${tournament.coins} 🪙`}
-            />
+          </div>
+
+          <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-xs uppercase tracking-wider text-white/40">
+              Prize
+            </p>
+
+            <p className="mt-1 text-lg font-semibold text-white">
+              {tournament.coins} eFootball Coins
+            </p>
           </div>
         </div>
 
-        {/* User */}
-        <div className="mt-4">
-          <div className="mb-2 text-[15px] font-black text-[#111111]">
+        {/* --------------------------------
+            Profile
+        --------------------------------- */}
+
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <h3 className="text-sm font-semibold text-white">
             Your Profile
-          </div>
+          </h3>
 
-          <div className="flex items-center rounded-[16px] border border-[#e6e6e6] bg-white p-3">
-            <div className="h-[48px] w-[48px] shrink-0 overflow-hidden rounded-full bg-[#eeeeee]">
-              {userProfile.profilePhoto ? (
-                <img
-                  src={
-                    userProfile.profilePhoto
-                  }
-                  alt={
-                    userProfile.username
-                  }
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-[22px]">
-                  👤
-                </div>
-              )}
-            </div>
+          <div className="mt-4 flex items-center gap-4">
 
-            <div className="ml-3 min-w-0">
-              <div className="truncate text-[17px] font-black text-[#111111]">
-                {
+            {userProfile.profilePhoto ? (
+              <img
+                src={
+                  userProfile.profilePhoto
+                }
+                alt={
                   userProfile.username
                 }
+                className="h-12 w-12 rounded-full object-cover"
+              />
+            ) : (
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-lg font-semibold text-white">
+                {userProfile.username
+                  ?.charAt(0)
+                  ?.toUpperCase() ||
+                  "U"}
               </div>
+            )}
 
-              <div className="mt-1 truncate text-[12px] font-medium text-[#888888]">
-                KONAMI ID:{" "}
-                {
-                  userProfile.konamiId
-                }
-              </div>
+            <div>
+              <p className="font-medium text-white">
+                {userProfile.username}
+              </p>
+
+              <p className="mt-1 text-sm text-white/50">
+                Konami ID:{" "}
+                {userProfile.konamiId}
+              </p>
             </div>
 
-            <div className="ml-auto rounded-full bg-[#dff8e8] px-3 py-1 text-[11px] font-black text-[#20854b]">
-              Verified
-            </div>
           </div>
         </div>
 
-        {/* Rules */}
-        <div className="mt-5 rounded-[16px] bg-white">
-          <div className="text-[17px] font-black text-[#111111]">
+        {/* --------------------------------
+            Rules
+        --------------------------------- */}
+
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <h3 className="text-sm font-semibold text-white">
             Before You Join
-          </div>
+          </h3>
 
-          <div className="mt-3 space-y-3">
-            <JoinRule text="Make sure your eFootball username is correct." />
+          <div className="mt-4 space-y-3">
 
-            <JoinRule text="Your tournament slot will be reserved after confirmation." />
+            <JoinRule>
+              Make sure your eFootball username
+              is correct.
+            </JoinRule>
 
-            <JoinRule text="Room details will be provided according to the tournament schedule." />
+            <JoinRule>
+              Your tournament slot will be
+              reserved after payment verification.
+            </JoinRule>
 
-            <JoinRule text="You must be available at the scheduled tournament time." />
+            <JoinRule>
+              Room details will be provided
+              according to the tournament schedule.
+            </JoinRule>
+
+            <JoinRule>
+              You must be available at the
+              scheduled tournament time.
+            </JoinRule>
+
           </div>
         </div>
 
-        {/* Error */}
+        {/* --------------------------------
+            Error
+        --------------------------------- */}
+
         {error && (
-          <div className="mt-5 rounded-[12px] border border-[#f1bcbc] bg-[#fff1f1] px-4 py-3 text-[13px] font-bold leading-[1.4] text-[#b42318]">
-            {error}
+          <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-4">
+            <p className="text-sm text-red-300">
+              {error}
+            </p>
           </div>
         )}
 
-        {/* Already joined */}
+        {/* --------------------------------
+            Already Joined
+        --------------------------------- */}
+
         {alreadyJoined && (
-          <div className="mt-5 rounded-[12px] bg-[#e8f8ee] px-4 py-3 text-center text-[14px] font-black text-[#20854b]">
-            You have already joined this tournament.
+          <div className="mt-4 rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-4">
+            <p className="text-sm text-yellow-300">
+              You already have a confirmed
+              booking for this tournament.
+            </p>
           </div>
         )}
 
-        {/* Confirm */}
+        {/* --------------------------------
+            Join Button
+        --------------------------------- */}
+
         <button
-          type="button"
+          onClick={handleJoin}
           disabled={
             joining ||
             alreadyJoined ||
             isFull ||
             isClosed
           }
-          onClick={handleJoin}
-          className={`mt-6 w-full rounded-[11px] py-[14px] text-[18px] font-black text-[#111111] shadow-[0_2px_5px_rgba(0,0,0,0.08)] transition active:scale-[0.99] ${
-            joining ||
-            alreadyJoined ||
-            isFull ||
-            isClosed
-              ? "bg-[#d2d5d3]"
-              : "bg-[#4bd17b]"
-          }`}
+          className="mt-5 w-full rounded-2xl bg-white px-5 py-4 text-sm font-bold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {joining
-            ? "Joining..."
-            : alreadyJoined
-            ? "Already Joined"
-            : isClosed
-            ? "Tournament Closed"
+            ? "Creating Booking..."
             : isFull
             ? "Tournament Full"
+            : isClosed
+            ? "Tournament Closed"
+            : alreadyJoined
+            ? "Already Booked"
             : `Confirm & Join • ₹${tournament.entryFee}`}
         </button>
 
-        <p className="mt-3 text-center text-[11px] font-medium leading-[1.4] text-[#999999]">
-          Your registered profile details
-          will be used for this tournament.
+        <p className="mt-3 text-center text-xs text-white/40">
+          After clicking, you will be taken to
+          the verification page.
         </p>
+
       </div>
     </PageFrame>
   );
 }
+
+/* --------------------------------
+   Page Frame
+--------------------------------- */
 
 function PageFrame({
   children,
@@ -872,13 +862,25 @@ function PageFrame({
   children: React.ReactNode;
 }) {
   return (
-    <main className="min-h-screen bg-[#eeeeee]">
-      <div className="mx-auto min-h-screen max-w-md bg-white shadow-[0_0_40px_rgba(0,0,0,0.08)]">
-        {children}
-      </div>
+    <main className="min-h-screen bg-black text-white">
+
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-black/80 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-5xl items-center px-4">
+          <h1 className="text-lg font-semibold">
+            Tournament
+          </h1>
+        </div>
+      </header>
+
+      {children}
+
     </main>
   );
 }
+
+/* --------------------------------
+   Info Item
+--------------------------------- */
 
 function InfoItem({
   label,
@@ -888,41 +890,55 @@ function InfoItem({
   value: string;
 }) {
   return (
-    <div className="text-center">
-      <div className="text-[11px] font-bold text-[#999999]">
-        {label}
-      </div>
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
 
-      <div className="mt-1 text-[16px] font-black text-[#111111]">
+      <p className="text-xs text-white/40">
+        {label}
+      </p>
+
+      <p className="mt-1 text-sm font-medium text-white">
         {value}
-      </div>
+      </p>
+
     </div>
   );
 }
+
+/* --------------------------------
+   Join Rule
+--------------------------------- */
 
 function JoinRule({
-  text,
+  children,
 }: {
-  text: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-2">
-      <div className="mt-[5px] h-[7px] w-[7px] shrink-0 rounded-full bg-[#4bd17b]" />
+    <div className="flex gap-3">
 
-      <p className="text-[13px] font-medium leading-[1.45] text-[#666666]">
-        {text}
+      <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-white/70" />
+
+      <p className="text-sm leading-6 text-white/60">
+        {children}
       </p>
+
     </div>
   );
 }
+
+/* --------------------------------
+   Page
+--------------------------------- */
 
 export default function JoinTournamentPage() {
   return (
     <Suspense
       fallback={
         <PageFrame>
-          <div className="flex min-h-screen items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-[#4bd17b] border-t-transparent" />
+          <div className="flex min-h-[60vh] items-center justify-center">
+            <div className="text-sm text-white/60">
+              Loading...
+            </div>
           </div>
         </PageFrame>
       }

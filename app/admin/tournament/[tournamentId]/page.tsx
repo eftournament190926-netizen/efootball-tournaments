@@ -9,6 +9,7 @@ import { auth, db } from "@/lib/firebase";
 import PlayersTab from "./PlayersTab";
 import FixtureTab from "./FixtureTab";
 import FixtureTab8Players from "./FixtureTab8Players";
+import BookingsTab from "./BookingsTab";
 
 type Tournament = {
   id: string;
@@ -40,7 +41,7 @@ type Tournament = {
   finalRoomCode?: string;
 };
 
-type Tab = "players" | "fixture";
+type Tab = "players" | "bookings" | "fixture";
 
 function getTournamentImage(coins: number) {
   return `/images/${coins}.png`;
@@ -677,66 +678,56 @@ export default function AdminTournamentManagePage() {
             </div>
 
             {/* Admin Tabs */}
-            <div className="mt-5 grid grid-cols-2 border-b border-[#e8e8e8]">
-              <TabButton
-                label="Players"
-                active={
-                  activeTab ===
-                  "players"
-                }
-                onClick={() =>
-                  setActiveTab(
-                    "players"
-                  )
-                }
-              />
+<div className="mt-5 grid grid-cols-3 border-b border-[#e8e8e8]">
+  <TabButton
+    label="Players"
+    active={activeTab === "players"}
+    onClick={() => setActiveTab("players")}
+  />
 
-              <TabButton
-                label="Fixture"
-                active={
-                  activeTab ===
-                  "fixture"
-                }
-                onClick={() =>
-                  setActiveTab(
-                    "fixture"
-                  )
-                }
-              />
-            </div>
+  <TabButton
+    label="Bookings"
+    active={activeTab === "bookings"}
+    onClick={() => setActiveTab("bookings")}
+  />
 
-            {/* Tab Content */}
-            <div className="pt-4">
-              {activeTab ===
-                "players" && (
-                <PlayersTab
-                  tournament={
-                    tournament
-                  }
-                  onTournamentUpdated={
-                    handleTournamentUpdated
-                  }
-                />
-              )}
+  <TabButton
+    label="Fixture"
+    active={activeTab === "fixture"}
+    onClick={() => setActiveTab("fixture")}
+  />
+</div>
 
-              {activeTab === "fixture" && (
-  tournament.maxPlayers === 8 ? (
-    <FixtureTab8Players
+{/* Tab Content */}
+<div className="pt-4">
+  {activeTab === "players" && (
+    <PlayersTab
       tournament={tournament}
-      onTournamentUpdated={
-        handleTournamentUpdated
-      }
+      onTournamentUpdated={handleTournamentUpdated}
     />
-  ) : (
-    <FixtureTab
+  )}
+
+  {activeTab === "bookings" && (
+    <BookingsTab
+      tournamentId={tournamentId}
       tournament={tournament}
-      onTournamentUpdated={
-        handleTournamentUpdated
-      }
+      onTournamentUpdated={handleTournamentUpdated}
     />
-  )
-)}
-            </div>
+  )}
+
+  {activeTab === "fixture" &&
+    (tournament.maxPlayers === 8 ? (
+      <FixtureTab8Players
+        tournament={tournament}
+        onTournamentUpdated={handleTournamentUpdated}
+      />
+    ) : (
+      <FixtureTab
+        tournament={tournament}
+        onTournamentUpdated={handleTournamentUpdated}
+      />
+    ))}
+</div>
           </div>
         </div>
       </div>
