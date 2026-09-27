@@ -711,7 +711,6 @@ export default function AdminTournamentManagePage() {
     <BookingsTab
       tournamentId={tournamentId}
       tournament={tournament}
-      onTournamentUpdated={handleTournamentUpdated}
     />
   )}
 
