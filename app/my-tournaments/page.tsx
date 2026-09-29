@@ -870,24 +870,11 @@ export default function MyTournamentsPage() {
         <header className="flex h-[112px] items-center bg-white px-7">
           <div className="flex items-center gap-3">
             {/* LOGO */}
-
-            <div className="relative flex h-[48px] w-[48px] items-center justify-center">
-              <div className="absolute h-[42px] w-[42px] rounded-full border-[9px] border-[#19b95b]" />
-
-              <div className="absolute h-[9px] w-[34px] rounded-full bg-white" />
-
-              <div className="absolute h-[9px] w-[34px] translate-y-[14px] rounded-full bg-[#19b95b]" />
-            </div>
-
-            <div>
-              <p className="text-[25px] font-black leading-none tracking-[-1.5px] text-[#111111]">
-                eFOOTBALL
-              </p>
-
-              <p className="mt-[4px] text-[11px] font-black leading-none tracking-[2px] text-[#111111]">
-                TOURNAMENTS
-              </p>
-            </div>
+<img
+  src="/logo.png"
+  alt="eFOOTBALL TOURNAMENTS"
+  className="h-[48px] w-[185px] object-contain object-left"
+/>
           </div>
         </header>
 

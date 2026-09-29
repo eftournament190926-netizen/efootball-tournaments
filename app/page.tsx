@@ -1213,30 +1213,11 @@ export default function HomePage() {
           <div className="flex h-[74px] items-center justify-between px-4">
 
             {/* LOGO */}
-
-            <div className="flex items-center">
-
-              <div className="mr-2 flex h-[39px] w-[39px] items-center justify-center rounded-full bg-[#00a94f]">
-
-                <span className="text-[25px] font-black italic text-white">
-                  e
-                </span>
-
-              </div>
-
-              <div>
-
-                <h1 className="text-[19px] font-black leading-none tracking-[-0.05em] text-[#151515]">
-                  eFOOTBALL
-                </h1>
-
-                <p className="mt-1 text-[7px] font-black tracking-[0.28em] text-[#444444]">
-                  TOURNAMENTS
-                </p>
-
-              </div>
-
-            </div>
+<img
+  src="/logo.png"
+  alt="eFOOTBALL TOURNAMENTS"
+  className="h-[48px] w-[185px] object-contain object-left"
+/>
 
             {/* PROFILE */}
 
