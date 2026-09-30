@@ -4,7 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-const ADMIN_WHATSAPP_NUMBER = "919747997663";
+const ADMIN_WHATSAPP_NUMBER = "918848558182";
 type Booking = {
   id: string;
   tournamentId: string;
