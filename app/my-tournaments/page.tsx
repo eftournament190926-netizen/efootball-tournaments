@@ -255,7 +255,9 @@ function BottomNavigation() {
             </>
           }
           onClick={() =>
-            router.push("/division")
+            router.push(
+              "/division"
+            )
           }
         />
 
@@ -303,10 +305,16 @@ function BottomNavItem({
       className={`flex h-full flex-col items-center justify-center gap-[3px] transition ${
         active
           ? "text-[#FFD600]"
-          : "text-[#8b8b8b]"
+          : "text-[#777777]"
       }`}
     >
-      <span className="flex h-[23px] items-center justify-center text-[19px] leading-none">
+      <span
+        className={`flex h-[23px] items-center justify-center text-[19px] leading-none transition ${
+          active
+            ? ""
+            : "grayscale opacity-35"
+        }`}
+      >
         {icon}
       </span>
 
@@ -314,7 +322,7 @@ function BottomNavItem({
         className={`text-[8px] leading-[10px] ${
           active
             ? "font-black text-[#FFD600]"
-            : "font-bold text-[#8b8b8b]"
+            : "font-bold text-[#777777] opacity-70"
         }`}
       >
         {label}

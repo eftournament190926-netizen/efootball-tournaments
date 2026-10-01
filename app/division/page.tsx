@@ -6,41 +6,55 @@ export default function DivisionPage() {
   const router = useRouter();
 
   return (
-    <main className="min-h-screen bg-[#e9e9e9] pb-[88px] text-black">
-      {/* Header */}
-      <header className="bg-[#111111] px-6 py-7 text-white">
-        <h1 className="text-[30px] font-extrabold">
+    <main className="min-h-screen bg-[#eeeeee] pb-[88px] text-[#111111]">
+      {/* HEADER */}
+      <header className="bg-[#FFD600] px-6 py-7">
+        <p className="text-[9px] font-black uppercase tracking-[0.16em] text-black/50">
+          eFootball
+        </p>
+
+        <h1 className="mt-1 text-[30px] font-extrabold text-[#111111]">
           Division League
         </h1>
       </header>
 
-      {/* Coming Soon */}
+      {/* COMING SOON */}
       <section className="flex min-h-[calc(100vh-180px)] items-center justify-center px-6">
-        <div className="w-full max-w-md rounded-[24px] border border-[#c8c8c8] bg-white px-6 py-12 text-center shadow-sm">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#e8f5e7] text-4xl">
+        <div className="w-full max-w-md rounded-[24px] border border-[#d8d8d8] bg-white px-6 py-12 text-center shadow-[0_5px_18px_rgba(0,0,0,0.06)]">
+
+          {/* ICON */}
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#FFD600] text-4xl">
             🏆
           </div>
-          <h2 className="mt-6 text-[28px] font-extrabold">
+
+          <h2 className="mt-6 text-[28px] font-extrabold text-[#111111]">
             Coming Soon
           </h2>
+
           <p className="mt-3 text-[16px] leading-6 text-[#888888]">
             Division League is currently under development.
             Stay tuned for the upcoming league system.
           </p>
+
           <button
+            type="button"
             onClick={() => router.push("/")}
-            className="mt-8 h-12 w-full rounded-xl bg-[#111111] text-sm font-bold text-white transition active:scale-[0.98]"
+            className="mt-8 h-12 w-full rounded-xl bg-[#111111] text-sm font-black text-[#FFD600] transition active:scale-[0.98]"
           >
             Back to Tournaments
           </button>
         </div>
       </section>
 
-      {/* Bottom Navigation */}
+      {/* BOTTOM NAVIGATION */}
       <BottomNavigation />
     </main>
   );
 }
+
+/* =================================================
+   BOTTOM NAV ITEM
+================================================= */
 
 function BottomNavItem({
   icon,
@@ -57,20 +71,29 @@ function BottomNavItem({
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-full flex-col items-center justify-center gap-[3px] ${
+      className={`flex h-full flex-col items-center justify-center gap-[3px] transition ${
         active
-          ? "text-[#111111]"
-          : "text-[#a6a6a6]"
+          ? "text-[#FFD600]"
+          : "text-[#777777]"
       }`}
     >
-      <span className="flex h-[23px] items-center justify-center text-[19px] leading-none">
+      {/* ICON */}
+      <span
+        className={`flex h-[23px] items-center justify-center text-[19px] leading-none transition ${
+          active
+            ? ""
+            : "grayscale opacity-35"
+        }`}
+      >
         {icon}
       </span>
+
+      {/* LABEL */}
       <span
         className={`text-[8px] leading-[10px] ${
           active
-            ? "font-black text-[#111111]"
-            : "font-bold text-[#a6a6a6]"
+            ? "font-black text-[#FFD600]"
+            : "font-bold text-[#777777] opacity-70"
         }`}
       >
         {label}
@@ -78,21 +101,26 @@ function BottomNavItem({
     </button>
   );
 }
+
 /* =================================================
    BOTTOM NAVIGATION
 ================================================= */
+
 function BottomNavigation() {
   const router = useRouter();
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#e5e7eb] bg-white">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#222222] bg-[#111111]">
       <div className="mx-auto grid h-[72px] max-w-md grid-cols-5">
+
+        {/* TOURNAMENTS */}
         <BottomNavItem
           icon="🏆"
           label="Tournaments"
-          onClick={() =>
-            router.push("/")
-          }
+          onClick={() => router.push("/")}
         />
+
+        {/* MY TOURNAMENTS */}
         <BottomNavItem
           icon="🎮"
           label={
@@ -103,11 +131,11 @@ function BottomNavigation() {
             </>
           }
           onClick={() =>
-            router.push(
-              "/my-tournaments"
-            )
+            router.push("/my-tournaments")
           }
         />
+
+        {/* DIVISION LEAGUE */}
         <BottomNavItem
           icon="⚡"
           active
@@ -119,11 +147,11 @@ function BottomNavigation() {
             </>
           }
           onClick={() =>
-            router.push(
-              "/division"
-            )
+            router.push("/division")
           }
         />
+
+        {/* LEADERBOARD */}
         <BottomNavItem
           icon="🏅"
           label={
@@ -134,18 +162,16 @@ function BottomNavigation() {
             </>
           }
           onClick={() =>
-            router.push(
-              "/leaderboard"
-            )
+            router.push("/leaderboard")
           }
         />
+
+        {/* PROFILE */}
         <BottomNavItem
           icon="👤"
           label="Profile"
           onClick={() =>
-            router.push(
-              "/profile"
-            )
+            router.push("/profile")
           }
         />
       </div>
