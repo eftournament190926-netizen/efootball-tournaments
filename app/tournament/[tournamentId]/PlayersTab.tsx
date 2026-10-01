@@ -12,6 +12,10 @@ import {
 
 import { db } from "@/lib/firebase";
 
+/* =================================================
+   TYPES
+================================================= */
+
 type Tournament = {
   id: string;
   coins: number;
@@ -36,6 +40,7 @@ type Registration = {
   username?: string;
   profilePhoto?: string;
   status?: string;
+
   createdAt?: {
     seconds: number;
     nanoseconds: number;
@@ -52,54 +57,93 @@ type Props = {
   tournament: Tournament;
 };
 
-export default function PlayersTab({ tournament }: Props) {
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [loading, setLoading] = useState(true);
+/* =================================================
+   PLAYERS TAB
+================================================= */
 
-  // Realtime tournament room-code data
-  const [roomCode, setRoomCode] = useState(tournament.roomCode || "");
-  const [roomCodeA, setRoomCodeA] = useState(tournament.roomCodeA || "");
-  const [roomCodeB, setRoomCodeB] = useState(tournament.roomCodeB || "");
+export default function PlayersTab({
+  tournament,
+}: Props) {
+  const [players, setPlayers] =
+    useState<Player[]>([]);
 
-  const is16Players = tournament.maxPlayers === 16;
+  const [loading, setLoading] =
+    useState(true);
 
-  /*
-   * Listen to tournament document in realtime.
-   *
-   * Admin changes:
-   * roomCode
-   * roomCodeA
-   * roomCodeB
-   *
-   * will automatically appear here.
-   */
-  useEffect(() => {
-    const tournamentRef = doc(db, "tournaments", tournament.id);
+  /* =================================================
+     ROOM CODES
+  ================================================= */
 
-    const unsubscribe = onSnapshot(
-      tournamentRef,
-      (snapshot) => {
-        if (!snapshot.exists()) {
-          return;
-        }
-
-        const data = snapshot.data();
-
-        setRoomCode(data.roomCode || "");
-        setRoomCodeA(data.roomCodeA || "");
-        setRoomCodeB(data.roomCodeB || "");
-      },
-      (error) => {
-        console.error("Failed to listen to tournament updates:", error);
-      }
+  const [roomCode, setRoomCode] =
+    useState(
+      tournament.roomCode || ""
     );
 
-    return () => unsubscribe();
+  const [roomCodeA, setRoomCodeA] =
+    useState(
+      tournament.roomCodeA || ""
+    );
+
+  const [roomCodeB, setRoomCodeB] =
+    useState(
+      tournament.roomCodeB || ""
+    );
+
+  const is16Players =
+    tournament.maxPlayers === 16;
+
+  /* =================================================
+     REALTIME ROOM CODE LISTENER
+  ================================================= */
+
+  useEffect(() => {
+    const tournamentRef = doc(
+      db,
+      "tournaments",
+      tournament.id
+    );
+
+    const unsubscribe =
+      onSnapshot(
+        tournamentRef,
+
+        (snapshot) => {
+          if (!snapshot.exists()) {
+            return;
+          }
+
+          const data =
+            snapshot.data();
+
+          setRoomCode(
+            data.roomCode || ""
+          );
+
+          setRoomCodeA(
+            data.roomCodeA || ""
+          );
+
+          setRoomCodeB(
+            data.roomCodeB || ""
+          );
+        },
+
+        (error) => {
+          console.error(
+            "Failed to listen to tournament updates:",
+            error
+          );
+        }
+      );
+
+    return () =>
+      unsubscribe();
   }, [tournament.id]);
 
-  /*
-   * Load registered players.
-   */
+  /* =================================================
+     LOAD PLAYERS
+  ================================================= */
+
   useEffect(() => {
     let cancelled = false;
 
@@ -107,79 +151,147 @@ export default function PlayersTab({ tournament }: Props) {
       try {
         setLoading(true);
 
-        const registrationsQuery = query(
-          collection(db, "tournamentRegistrations"),
-          where("tournamentId", "==", tournament.id)
+        const registrationsQuery =
+          query(
+            collection(
+              db,
+              "tournamentRegistrations"
+            ),
+
+            where(
+              "tournamentId",
+              "==",
+              tournament.id
+            )
+          );
+
+        const snapshot =
+          await getDocs(
+            registrationsQuery
+          );
+
+        const registrations: Registration[] =
+          snapshot.docs.map(
+            (document) => ({
+              id: document.id,
+
+              ...(document.data() as Omit<
+                Registration,
+                "id"
+              >),
+            })
+          );
+
+        /* =========================================
+           REGISTRATION ORDER
+        ========================================= */
+
+        registrations.sort(
+          (a, b) => {
+            const aTime =
+              a.createdAt
+                ?.seconds ?? 0;
+
+            const bTime =
+              b.createdAt
+                ?.seconds ?? 0;
+
+            return (
+              aTime - bTime
+            );
+          }
         );
 
-        const snapshot = await getDocs(registrationsQuery);
+        const loadedPlayers: Player[] =
+          [];
 
-        const registrations: Registration[] = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...(doc.data() as Omit<Registration, "id">),
-        }));
+        for (
+          const registration of registrations
+        ) {
+          /* =======================================
+             CONFIRMED PLAYERS ONLY
+          ======================================= */
 
-        /*
-         * Keep registration order.
-         */
-        registrations.sort((a, b) => {
-          const aTime = a.createdAt?.seconds ?? 0;
-          const bTime = b.createdAt?.seconds ?? 0;
-
-          return aTime - bTime;
-        });
-
-        const loadedPlayers: Player[] = [];
-
-        for (const registration of registrations) {
-          /*
-           * Only confirmed players are shown.
-           */
           if (
             registration.status &&
-            registration.status !== "confirmed"
+            registration.status !==
+              "confirmed"
           ) {
             continue;
           }
 
-          const uid = registration.userId || registration.uid;
+          const uid =
+            registration.userId ||
+            registration.uid;
 
-          /*
-           * If registration already contains username/photo,
-           * use that directly.
-           */
-          if (registration.username) {
+          /* =======================================
+             REGISTRATION ALREADY HAS USER DATA
+          ======================================= */
+
+          if (
+            registration.username
+          ) {
             loadedPlayers.push({
-              id: uid || registration.id,
-              username: registration.username,
-              profilePhoto: registration.profilePhoto || "",
+              id:
+                uid ||
+                registration.id,
+
+              username:
+                registration.username,
+
+              profilePhoto:
+                registration.profilePhoto ||
+                "",
             });
 
             continue;
           }
 
-          /*
-           * Otherwise load user profile.
-           */
+          /* =======================================
+             NO UID
+          ======================================= */
+
           if (!uid) {
             continue;
           }
 
-          try {
-            const userSnapshot = await getDocs(
-              query(
-                collection(db, "users"),
-                where("uid", "==", uid)
-              )
-            );
+          /* =======================================
+             LOAD USER PROFILE
+          ======================================= */
 
-            if (!userSnapshot.empty) {
-              const userData = userSnapshot.docs[0].data();
+          try {
+            const userSnapshot =
+              await getDocs(
+                query(
+                  collection(
+                    db,
+                    "users"
+                  ),
+
+                  where(
+                    "uid",
+                    "==",
+                    uid
+                  )
+                )
+              );
+
+            if (
+              !userSnapshot.empty
+            ) {
+              const userData =
+                userSnapshot.docs[0].data();
 
               loadedPlayers.push({
                 id: uid,
-                username: userData.username || "Player",
-                profilePhoto: userData.profilePhoto || "",
+
+                username:
+                  userData.username ||
+                  "Player",
+
+                profilePhoto:
+                  userData.profilePhoto ||
+                  "",
               });
             }
           } catch (error) {
@@ -191,7 +303,9 @@ export default function PlayersTab({ tournament }: Props) {
         }
 
         if (!cancelled) {
-          setPlayers(loadedPlayers);
+          setPlayers(
+            loadedPlayers
+          );
         }
       } catch (error) {
         console.error(
@@ -216,36 +330,42 @@ export default function PlayersTab({ tournament }: Props) {
     };
   }, [tournament.id]);
 
-  /*
-   * Pool A
-   */
+  /* =================================================
+     POOL A
+  ================================================= */
+
   const poolA = useMemo(() => {
     return players.slice(0, 8);
   }, [players]);
 
-  /*
-   * Pool B
-   */
+  /* =================================================
+     POOL B
+  ================================================= */
+
   const poolB = useMemo(() => {
     if (!is16Players) {
       return [];
     }
 
-    return players.slice(8, 16);
-  }, [players, is16Players]);
+    return players.slice(
+      8,
+      16
+    );
+  }, [
+    players,
+    is16Players,
+  ]);
 
-  /*
-   * Admin room-code priority:
-   *
-   * Pool A:
-   * roomCodeA → roomCode → placeholder
-   *
-   * Pool B:
-   * roomCodeB → roomCode → placeholder
-   *
-   * 8 Players:
-   * roomCodeA → roomCode → placeholder
-   */
+  /* =================================================
+     ROOM CODE PRIORITY
+
+     Pool A:
+     roomCodeA -> roomCode -> placeholder
+
+     Pool B:
+     roomCodeB -> roomCode -> placeholder
+  ================================================= */
+
   const displayRoomCodeA =
     roomCodeA ||
     roomCode ||
@@ -256,47 +376,90 @@ export default function PlayersTab({ tournament }: Props) {
     roomCode ||
     "Room Code";
 
+  /* =================================================
+     LOADING
+  ================================================= */
+
   if (loading) {
     return (
-      <div className="rounded-[16px] bg-white px-3 py-6">
-        <div className="flex items-center justify-center">
-          <div className="h-6 w-6 animate-spin rounded-full border-[3px] border-[#4bd17b] border-t-transparent" />
+      <div className="bg-white px-4 py-10">
+        <div className="flex flex-col items-center justify-center">
+
+          <div className="h-8 w-8 animate-spin rounded-full border-[4px] border-[#eeeeee] border-t-[#FFD600]" />
+
+          <p className="mt-3 text-[11px] font-black text-[#777777]">
+            Loading players...
+          </p>
+
         </div>
       </div>
     );
   }
 
+  /* =================================================
+     UI
+  ================================================= */
+
   return (
-    <div className="rounded-[16px] bg-white px-2.5 pb-4 pt-4">
+    <div className="bg-white px-3 pb-6 pt-5">
+
+      {/* ============================================
+          16 PLAYERS
+      ============================================ */}
+
       {is16Players ? (
         <div className="grid grid-cols-2 gap-3">
+
+          {/* POOL A */}
+
           <PlayerPool
             title="Pool A"
-            roomCode={displayRoomCodeA}
+            roomCode={
+              displayRoomCodeA
+            }
             players={poolA}
             startNumber={1}
           />
 
+          {/* POOL B */}
+
           <PlayerPool
             title="Pool B"
-            roomCode={displayRoomCodeB}
+            roomCode={
+              displayRoomCodeB
+            }
             players={poolB}
             startNumber={9}
           />
+
         </div>
       ) : (
+
+        /* ==========================================
+           8 PLAYERS
+        ========================================== */
+
         <div className="w-full">
+
           <PlayerPool
             title="Players"
-            roomCode={displayRoomCodeA}
+            roomCode={
+              displayRoomCodeA
+            }
             players={poolA}
             startNumber={1}
           />
+
         </div>
       )}
+
     </div>
   );
 }
+
+/* =================================================
+   PLAYER POOL
+================================================= */
 
 function PlayerPool({
   title,
@@ -309,41 +472,107 @@ function PlayerPool({
   players: Player[];
   startNumber: number;
 }) {
-  const slots = Array.from({ length: 8 }, (_, index) => {
-    return players[index] || null;
-  });
+  /* Always display 8 slots */
+
+  const slots =
+    Array.from(
+      { length: 8 },
+      (_, index) => {
+        return (
+          players[index] ||
+          null
+        );
+      }
+    );
 
   return (
-    <div className="min-w-0">
-      {/* Pool title */}
-      <div className="mb-2 text-center text-[16px] font-black leading-none text-[#111111]">
-        {title}
+    <div className="min-w-0 overflow-hidden rounded-[15px] border border-[#e5e5e5] bg-white shadow-[0_3px_12px_rgba(0,0,0,0.05)]">
+
+      {/* ============================================
+          POOL HEADER
+      ============================================ */}
+
+      <div className="relative overflow-hidden bg-[#111111] px-3 py-[12px]">
+
+        <div className="relative z-10 flex items-center justify-center gap-[7px]">
+
+          {/* PLAYERS ICON */}
+
+          <span className="text-[15px] leading-none">
+            👥
+          </span>
+
+          {/* TITLE */}
+
+          <span className="text-[15px] font-black leading-none text-[#FFD600]">
+            {title}
+          </span>
+
+        </div>
+
+        {/* YELLOW DIAGONAL ACCENT */}
+
+        <div className="absolute -right-[9px] -top-[12px] h-[70px] w-[23px] rotate-[22deg] bg-[#FFD600]" />
+
       </div>
 
-      {/* Room code */}
-      <div className="mb-3 flex h-[26px] items-center justify-center rounded-[9px] bg-[#c9c9c9] px-1.5">
-        <span className="truncate text-[12px] font-black leading-none text-[#111111]">
-          {roomCode || "Room Code"}
-        </span>
+      {/* ============================================
+          ROOM CODE
+      ============================================ */}
+
+      <div className="px-2.5 pt-3">
+
+        <div className="overflow-hidden rounded-[9px] border border-[#111111] bg-[#FFD600]">
+
+          <div className="bg-[#111111] py-[4px] text-center text-[7px] font-black uppercase tracking-[0.15em] text-[#FFD600]">
+            Room Code
+          </div>
+
+          <div className="flex h-[32px] items-center justify-center px-2">
+
+            <span className="block max-w-full truncate text-[12px] font-black tracking-[0.04em] text-[#111111]">
+              {roomCode ||
+                "Room Code"}
+            </span>
+
+          </div>
+        </div>
+
       </div>
 
-      {/* Players */}
-      <div className="space-y-[7px]">
-        {slots.map((player, index) => {
-          const number = startNumber + index;
+      {/* ============================================
+          PLAYERS
+      ============================================ */}
 
-          return (
-            <PlayerRow
-              key={`${number}-${player?.id || "empty"}`}
-              number={number}
-              player={player}
-            />
-          );
-        })}
+      <div className="space-y-[3px] px-2 pb-3 pt-3">
+
+        {slots.map(
+          (player, index) => {
+            const number =
+              startNumber +
+              index;
+
+            return (
+              <PlayerRow
+                key={`${number}-${
+                  player?.id ||
+                  "empty"
+                }`}
+                number={number}
+                player={player}
+              />
+            );
+          }
+        )}
+
       </div>
     </div>
   );
 }
+
+/* =================================================
+   PLAYER ROW
+================================================= */
 
 function PlayerRow({
   number,
@@ -352,60 +581,86 @@ function PlayerRow({
   number: number;
   player: Player | null;
 }) {
-  /*
-   * Empty slot
-   */
+  /* =================================================
+     EMPTY SLOT
+  ================================================= */
+
   if (!player) {
     return (
-      <div className="flex h-[31px] min-w-0 items-center">
-        {/* Number */}
-        <div className="w-[17px] shrink-0 text-center text-[12px] font-black text-[#111111]">
+      <div className="flex min-h-[40px] min-w-0 items-center rounded-[8px] bg-[#f6f6f6] px-[5px]">
+
+        {/* NUMBER */}
+
+        <div className="flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full bg-[#e7e7e7] text-[10px] font-black text-[#888888]">
           {number}
         </div>
 
-        {/* Empty profile */}
-        <div className="mx-[5px] h-[27px] w-[27px] shrink-0 rounded-full border border-[#e5e5e5] bg-[#f3f3f3]" />
+        {/* PROFILE */}
 
-        {/* Empty username */}
+        <div className="mx-[6px] flex h-[29px] w-[29px] shrink-0 items-center justify-center rounded-full border border-[#dddddd] bg-white">
+
+          <span className="text-[11px] opacity-40">
+            👤
+          </span>
+
+        </div>
+
+        {/* EMPTY */}
+
         <div className="min-w-0 flex-1 overflow-hidden">
-          <span className="block truncate text-[11px] font-bold text-[#b0b0b0]">
+
+          <span className="block truncate text-[10px] font-bold text-[#b0b0b0]">
             Empty Slot
           </span>
+
         </div>
       </div>
     );
   }
 
-  /*
-   * Player
-   */
+  /* =================================================
+     REGISTERED PLAYER
+  ================================================= */
+
   return (
-    <div className="flex h-[31px] min-w-0 items-center">
-      {/* Number */}
-      <div className="w-[17px] shrink-0 text-center text-[12px] font-black text-[#111111]">
+    <div className="flex min-h-[40px] min-w-0 items-center rounded-[8px] border border-[#f0f0f0] bg-white px-[5px] transition">
+
+      {/* NUMBER */}
+
+      <div className="flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full bg-[#FFD600] text-[10px] font-black text-[#111111]">
         {number}
       </div>
 
-      {/* Profile */}
-      <div className="mx-[5px] h-[27px] w-[27px] shrink-0 overflow-hidden rounded-full border border-[#dddddd] bg-white">
+      {/* PROFILE */}
+
+      <div className="mx-[6px] h-[30px] w-[30px] shrink-0 overflow-hidden rounded-full border-2 border-[#FFD600] bg-white">
+
         {player.profilePhoto ? (
           <img
-            src={player.profilePhoto}
-            alt=""
+            src={
+              player.profilePhoto
+            }
+            alt={
+              player.username
+            }
             className="h-full w-full object-cover"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-[12px]">
+          <div className="flex h-full w-full items-center justify-center bg-[#f5f5f5] text-[12px]">
             👤
           </div>
         )}
+
       </div>
 
-      {/* Username */}
+      {/* USERNAME */}
+
       <div className="min-w-0 flex-1 overflow-hidden">
-        <span className="block truncate text-[12px] font-black leading-none text-[#111111]">
+
+        <span className="block truncate text-[11px] font-black leading-none text-[#111111]">
           {player.username}
         </span>
+
       </div>
     </div>
   );

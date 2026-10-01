@@ -222,7 +222,7 @@ function BottomNavigation() {
   const router = useRouter();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#e5e7eb] bg-white">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#222222] bg-[#111111]">
       <div className="mx-auto grid h-[72px] max-w-md grid-cols-5">
         <BottomNavItem
           icon="🏆"
@@ -300,10 +300,10 @@ function BottomNavItem({
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-full flex-col items-center justify-center gap-[3px] ${
+      className={`flex h-full flex-col items-center justify-center gap-[3px] transition ${
         active
-          ? "text-[#111111]"
-          : "text-[#a6a6a6]"
+          ? "text-[#FFD600]"
+          : "text-[#8b8b8b]"
       }`}
     >
       <span className="flex h-[23px] items-center justify-center text-[19px] leading-none">
@@ -313,8 +313,8 @@ function BottomNavItem({
       <span
         className={`text-[8px] leading-[10px] ${
           active
-            ? "font-black text-[#111111]"
-            : "font-bold text-[#a6a6a6]"
+            ? "font-black text-[#FFD600]"
+            : "font-bold text-[#8b8b8b]"
         }`}
       >
         {label}
@@ -367,40 +367,44 @@ function TournamentCard({
     <button
       type="button"
       onClick={onOpen}
-      className="w-[340px] shrink-0 overflow-hidden rounded-[16px] border border-[#d9d9d9] bg-white text-left shadow-[0_1px_4px_rgba(0,0,0,0.08)]"
+      className="w-[340px] shrink-0 overflow-hidden rounded-[20px] border border-[#d9d9d9] bg-white text-left shadow-[0_4px_14px_rgba(0,0,0,0.08)] transition active:scale-[0.99]"
     >
       {/* IMAGE */}
 
-      <div className="h-[168px] w-full overflow-hidden bg-[#f2f2f2]">
+      <div className="relative w-full overflow-hidden bg-white">
         <img
           src={image}
           alt={`Tournament ${tournament.points}`}
-          className="h-full w-full object-cover"
+          className="block h-auto w-full"
         />
+
+        <div className="absolute left-3 top-3 rounded-full bg-[#111111] px-3 py-[6px] text-[9px] font-black uppercase tracking-[0.08em] text-[#FFD600]">
+          eFootball
+        </div>
       </div>
 
       {/* DETAILS */}
 
-      <div className="px-5 pb-4 pt-4">
-        {/* DATE */}
+      <div className="px-5 pb-5 pt-4">
+        {/* DATE / COUNTDOWN */}
 
-        <div className="grid grid-cols-[1fr_auto] items-center">
+        <div className="grid grid-cols-[1fr_auto] items-start gap-3">
           <div>
-            <p className="text-[20px] font-black leading-none text-[#111111]">
-              {formatDate(
-                tournament.date,
-              )}
+            <p className="text-[19px] font-black leading-none text-[#111111]">
+              {formatDate(tournament.date)}
             </p>
 
-            <p className="mt-3 text-[18px] font-bold text-[#111111]">
-              {formatTime(
-                tournament.time,
-              )}
+            <p className="mt-3 text-[17px] font-bold text-[#111111]">
+              {formatTime(tournament.time)}
             </p>
           </div>
 
-          <div className="text-right">
-            <p className="text-[19px] font-black text-[#111111]">
+          <div className="rounded-[12px] bg-[#FFF6C7] px-3 py-2 text-right">
+            <p className="text-[9px] font-black uppercase tracking-[0.08em] text-[#777777]">
+              Starts In
+            </p>
+
+            <p className="mt-1 whitespace-nowrap text-[15px] font-black text-[#111111]">
               {getCountdown(
                 tournament.date,
                 tournament.time,
@@ -411,23 +415,23 @@ function TournamentCard({
 
         {/* INFO */}
 
-        <div className="mt-5 grid grid-cols-2">
-          <div>
-            <p className="text-[12px] font-medium text-[#8b939a]">
+        <div className="mt-5 grid grid-cols-2 overflow-hidden rounded-[14px] border border-[#eeeeee] bg-[#fafafa]">
+          <div className="p-3">
+            <p className="text-[10px] font-bold text-[#8b939a]">
               Entry Fee
             </p>
 
-            <p className="mt-1 text-[18px] font-black text-[#111111]">
+            <p className="mt-1 text-[17px] font-black text-[#111111]">
               ₹{tournament.entryFee || 0}
             </p>
           </div>
 
-          <div className="border-l border-[#e1e1e1] pl-5">
-            <p className="text-[12px] font-medium text-[#8b939a]">
+          <div className="border-l border-[#e1e1e1] p-3">
+            <p className="text-[10px] font-bold text-[#8b939a]">
               Prize Pool
             </p>
 
-            <p className="mt-1 text-[18px] font-black text-[#111111]">
+            <p className="mt-1 text-[17px] font-black text-[#111111]">
               {tournament.rewardCoins || 0} coin
             </p>
           </div>
@@ -436,27 +440,31 @@ function TournamentCard({
         {/* PLAYERS */}
 
         <div className="mt-5">
-          <div className="flex items-center gap-2">
-            <div className="h-[7px] flex-1 overflow-hidden rounded-full bg-[#dddddd]">
-              <div
-                className="h-full rounded-full bg-[#16c968]"
-                style={{
-                  width: `${percentage}%`,
-                }}
-              />
-            </div>
-
-            <span className="whitespace-nowrap text-[12px] font-bold text-[#92999e]">
-              {registered}/{maxPlayers} Players
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-[0.08em] text-[#777777]">
+              Players
             </span>
+
+            <span className="text-[11px] font-black text-[#111111]">
+              {registered}/{maxPlayers}
+            </span>
+          </div>
+
+          <div className="h-[7px] w-full overflow-hidden rounded-full bg-[#e3e3e3]">
+            <div
+              className="h-full rounded-full bg-[#FFD600]"
+              style={{
+                width: `${percentage}%`,
+              }}
+            />
           </div>
         </div>
 
         {/* STATUS */}
 
         {played && (
-          <div className="mt-3">
-            <span className="inline-flex rounded-full bg-[#e8f8ef] px-3 py-1 text-[10px] font-black uppercase tracking-wide text-[#08a951]">
+          <div className="mt-4">
+            <span className="inline-flex rounded-full bg-[#111111] px-3 py-[6px] text-[9px] font-black uppercase tracking-[0.08em] text-[#FFD600]">
               Played
             </span>
           </div>
@@ -504,14 +512,18 @@ export default function MyTournamentsPage() {
         (user) => {
           if (!user) {
             setUserId(null);
+
             setAuthLoading(false);
+
             router.push(
               "/login?redirect=/my-tournaments",
             );
+
             return;
           }
 
           setUserId(user.uid);
+
           setAuthLoading(false);
         },
       );
@@ -551,6 +563,7 @@ export default function MyTournamentsPage() {
             snapshot.docs.map(
               (item) => ({
                 id: item.id,
+
                 ...(item.data() as Omit<
                   Registration,
                   "id"
@@ -592,6 +605,7 @@ export default function MyTournamentsPage() {
           );
 
           setRegistrations([]);
+
           setLoading(false);
         },
       );
@@ -606,7 +620,9 @@ export default function MyTournamentsPage() {
   useEffect(() => {
     if (registrations.length === 0) {
       setTournaments([]);
+
       setLoading(false);
+
       return;
     }
 
@@ -775,6 +791,7 @@ export default function MyTournamentsPage() {
 
       if (!cancelled) {
         setTournaments(result);
+
         setLoading(false);
       }
     }
@@ -844,7 +861,7 @@ export default function MyTournamentsPage() {
       <main className="min-h-screen bg-[#eeeeee]">
         <div className="mx-auto flex min-h-screen max-w-md items-center justify-center bg-[#eeeeee]">
           <div className="text-center">
-            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-[3px] border-[#16c968] border-t-transparent" />
+            <div className="mx-auto h-9 w-9 animate-spin rounded-full border-[3px] border-[#FFD600] border-t-[#111111]" />
 
             <p className="mt-3 text-[11px] font-bold text-[#777777]">
               Loading tournaments...
@@ -867,14 +884,13 @@ export default function MyTournamentsPage() {
             HEADER
         =============================================== */}
 
-        <header className="flex h-[112px] items-center bg-white px-7">
+        <header className="flex h-[112px] items-center bg-[#FFD600] px-7">
           <div className="flex items-center gap-3">
-            {/* LOGO */}
-<img
-  src="/logo.png"
-  alt="eFOOTBALL TOURNAMENTS"
-  className="h-[48px] w-[185px] object-contain object-left"
-/>
+            <img
+              src="/logo.png"
+              alt="eFOOTBALL TOURNAMENTS"
+              className="h-[48px] w-[185px] object-contain object-left"
+            />
           </div>
         </header>
 
@@ -891,7 +907,7 @@ export default function MyTournamentsPage() {
                   "upcoming",
                 )
               }
-              className={`relative h-[62px] text-[19px] font-black ${
+              className={`relative h-[62px] text-[18px] font-black ${
                 activeTab === "upcoming"
                   ? "text-[#111111]"
                   : "text-[#a7a7a7]"
@@ -901,7 +917,7 @@ export default function MyTournamentsPage() {
 
               {activeTab ===
                 "upcoming" && (
-                <span className="absolute bottom-0 left-[36px] right-[36px] h-[4px] rounded-full bg-[#111111]" />
+                <span className="absolute bottom-0 left-[36px] right-[36px] h-[4px] rounded-full bg-[#FFD600]" />
               )}
             </button>
 
@@ -912,7 +928,7 @@ export default function MyTournamentsPage() {
                   "played",
                 )
               }
-              className={`relative h-[62px] text-[19px] font-black ${
+              className={`relative h-[62px] text-[18px] font-black ${
                 activeTab === "played"
                   ? "text-[#111111]"
                   : "text-[#a7a7a7]"
@@ -922,7 +938,7 @@ export default function MyTournamentsPage() {
 
               {activeTab ===
                 "played" && (
-                <span className="absolute bottom-0 left-[36px] right-[36px] h-[4px] rounded-full bg-[#111111]" />
+                <span className="absolute bottom-0 left-[36px] right-[36px] h-[4px] rounded-full bg-[#FFD600]" />
               )}
             </button>
           </div>
@@ -933,7 +949,6 @@ export default function MyTournamentsPage() {
         =============================================== */}
 
         <section className="min-h-[calc(100vh-256px)] bg-[#eeeeee] px-3 pb-8 pt-8">
-
           {displayedTournaments.length >
           0 ? (
             <div className="flex gap-5 overflow-x-auto pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -948,39 +963,44 @@ export default function MyTournamentsPage() {
                       userId || ""
                     }
                     onOpen={() => {
-                      const params = new URLSearchParams({
-                        category: tournament.category,
-                        date: tournament.date,
-                        time: tournament.time,
-                        tournamentId: tournament.id,
-                      });
+                      const params =
+                        new URLSearchParams({
+                          category:
+                            tournament.category,
+                          date:
+                            tournament.date,
+                          time:
+                            tournament.time,
+                          tournamentId:
+                            tournament.id,
+                        });
 
                       router.push(
-  `/tournament/${tournament.id}?from=my-tournaments`,
-);
+                        `/tournament/${tournament.id}?from=my-tournaments`,
+                      );
                     }}
                   />
                 ),
               )}
             </div>
           ) : (
-            <div className="flex min-h-[350px] items-center justify-center">
-              <div className="text-center">
-                <div className="text-[42px]">
+            <div className="flex min-h-[350px] items-center justify-center px-5">
+              <div className="w-full rounded-[22px] border border-[#dedede] bg-white px-6 py-10 text-center shadow-[0_4px_14px_rgba(0,0,0,0.05)]">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#FFD600] text-[30px]">
                   {activeTab ===
                   "upcoming"
                     ? "🎮"
                     : "🏆"}
                 </div>
 
-                <p className="mt-3 text-[16px] font-black text-[#222222]">
+                <p className="mt-5 text-[17px] font-black text-[#111111]">
                   {activeTab ===
                   "upcoming"
                     ? "No upcoming tournaments"
                     : "No tournaments played yet"}
                 </p>
 
-                <p className="mt-2 text-[12px] font-medium text-[#8b8b8b]">
+                <p className="mx-auto mt-2 max-w-[260px] text-[12px] font-medium leading-5 text-[#8b8b8b]">
                   {activeTab ===
                   "upcoming"
                     ? "Your confirmed tournaments will appear here."

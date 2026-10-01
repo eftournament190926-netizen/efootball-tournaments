@@ -311,36 +311,36 @@ export default function LeaderboardPage() {
 
   return (
     <main className="min-h-screen bg-[#eeeeee]">
-
-      <div className="mx-auto min-h-screen max-w-md bg-white pb-[82px] shadow-[0_0_40px_rgba(0,0,0,0.08)]">
+      <div className="mx-auto min-h-screen max-w-md bg-[#f2f2f2] pb-[82px] shadow-[0_0_40px_rgba(0,0,0,0.08)]">
 
         {/* =========================================
             HEADER
         ========================================= */}
 
-        <header className="relative bg-[#111111] px-4 pb-5 pt-5 text-white">
-
+        <header className="relative bg-[#FFD600] px-4 pb-6 pt-5 text-[#111111]">
           <button
             type="button"
             onClick={() =>
               router.back()
             }
-            className="absolute left-4 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-[24px] font-black"
+            className="absolute left-4 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-[#111111] text-[24px] font-black text-[#FFD600] transition active:scale-95"
             aria-label="Go back"
           >
             ‹
           </button>
 
           <div className="text-center">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#111111] text-[19px]">
+              🏆
+            </div>
 
-            <h1 className="text-[27px] font-black">
+            <h1 className="mt-2 text-[27px] font-black">
               Ranking
             </h1>
 
-            <p className="mt-1 text-[11px] font-semibold text-white/50">
+            <p className="mt-1 text-[11px] font-bold text-black/55">
               Tournament Leaderboard
             </p>
-
           </div>
         </header>
 
@@ -349,49 +349,52 @@ export default function LeaderboardPage() {
         ========================================= */}
 
         <section className="px-3 pt-4">
+          <div className="overflow-hidden rounded-[14px] border border-[#dedede] bg-white shadow-[0_3px_12px_rgba(0,0,0,0.04)]">
+            <div className="bg-[#111111] px-3 py-2 text-center text-[9px] font-black uppercase tracking-[0.12em] text-[#FFD600]">
+              Ranking Points
+            </div>
 
-          <div className="flex items-center justify-center gap-2 rounded-[12px] bg-[#f3f3f3] px-3 py-2 text-[10px] font-black text-[#666666]">
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-3 py-3 text-[10px] font-black text-[#666666]">
+              <span>
+                WIN{" "}
+                <strong className="text-[#111111]">
+                  +3
+                </strong>
+              </span>
 
-            <span>
-              WIN{" "}
-              <strong className="text-[#111111]">
-                +3
-              </strong>
-            </span>
+              <span className="text-[#d0d0d0]">
+                •
+              </span>
 
-            <span className="text-[#cccccc]">
-              •
-            </span>
+              <span>
+                LOSS{" "}
+                <strong className="text-[#111111]">
+                  -2
+                </strong>
+              </span>
 
-            <span>
-              LOSS{" "}
-              <strong className="text-[#111111]">
-                -2
-              </strong>
-            </span>
+              <span className="text-[#d0d0d0]">
+                •
+              </span>
 
-            <span className="text-[#cccccc]">
-              •
-            </span>
+              <span>
+                CHAMPION{" "}
+                <strong className="text-[#111111]">
+                  +3
+                </strong>
+              </span>
 
-            <span>
-              CHAMPION{" "}
-              <strong className="text-[#111111]">
-                +3
-              </strong>
-            </span>
+              <span className="text-[#d0d0d0]">
+                •
+              </span>
 
-            <span className="text-[#cccccc]">
-              •
-            </span>
-
-            <span>
-              RUNNER{" "}
-              <strong className="text-[#111111]">
-                +2
-              </strong>
-            </span>
-
+              <span>
+                RUNNER{" "}
+                <strong className="text-[#111111]">
+                  +2
+                </strong>
+              </span>
+            </div>
           </div>
         </section>
 
@@ -400,14 +403,32 @@ export default function LeaderboardPage() {
         ========================================= */}
 
         <section className="px-3 pt-4">
+          <div className="overflow-hidden rounded-[16px] border border-[#dedede] bg-white shadow-[0_4px_14px_rgba(0,0,0,0.05)]">
 
-          <div className="overflow-hidden rounded-[14px] border border-[#e8e8e8]">
+            {/* TABLE TITLE */}
+
+            <div className="flex items-center justify-between border-b border-[#eeeeee] px-4 py-3">
+              <div>
+                <p className="text-[14px] font-black text-[#111111]">
+                  Top Players
+                </p>
+
+                <p className="mt-[2px] text-[9px] font-bold text-[#999999]">
+                  Overall Tournament Ranking
+                </p>
+              </div>
+
+              <div className="rounded-full bg-[#FFD600] px-3 py-[6px] text-[9px] font-black text-[#111111]">
+                {rankedPlayers.length} Players
+              </div>
+            </div>
 
             {/* TABLE HEADER */}
 
-            <div className="grid grid-cols-[28px_minmax(120px,1fr)_32px_28px_28px_52px_35px_42px] items-center bg-[#f4f4f4] px-2 py-3 text-[10px] font-black text-[#777777]">
-
-              <div>#</div>
+            <div className="grid grid-cols-[28px_minmax(120px,1fr)_32px_28px_28px_52px_35px_42px] items-center bg-[#111111] px-2 py-3 text-[9px] font-black text-[#FFD600]">
+              <div>
+                #
+              </div>
 
               <div>
                 Top Player
@@ -436,7 +457,6 @@ export default function LeaderboardPage() {
               <div className="text-center">
                 Pts
               </div>
-
             </div>
 
             {/* =====================================
@@ -444,10 +464,12 @@ export default function LeaderboardPage() {
             ===================================== */}
 
             {loading ? (
-              <div className="flex min-h-[300px] items-center justify-center">
+              <div className="flex min-h-[300px] flex-col items-center justify-center">
+                <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-[#FFD600] border-t-[#111111]" />
 
-                <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-[#4bd17b] border-t-transparent" />
-
+                <p className="mt-3 text-[10px] font-bold text-[#888888]">
+                  Loading ranking...
+                </p>
               </div>
             ) : error ? (
 
@@ -456,11 +478,15 @@ export default function LeaderboardPage() {
               =================================== */
 
               <div className="flex min-h-[260px] items-center justify-center px-6 text-center">
+                <div>
+                  <div className="text-[30px]">
+                    ⚠️
+                  </div>
 
-                <p className="text-[13px] font-bold text-red-500">
-                  {error}
-                </p>
-
+                  <p className="mt-3 text-[13px] font-bold text-red-500">
+                    {error}
+                  </p>
+                </div>
               </div>
 
             ) : rankedPlayers.length === 0 ? (
@@ -469,24 +495,20 @@ export default function LeaderboardPage() {
                  EMPTY
               =================================== */
 
-              <div className="flex min-h-[260px] items-center justify-center px-6 text-center">
-
+              <div className="flex min-h-[300px] items-center justify-center px-6 text-center">
                 <div>
-
-                  <div className="text-[32px]">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#FFD600] text-[30px]">
                     🏆
                   </div>
 
-                  <p className="mt-2 text-[14px] font-black text-[#111111]">
+                  <p className="mt-4 text-[15px] font-black text-[#111111]">
                     No ranking yet
                   </p>
 
-                  <p className="mt-1 text-[11px] font-semibold text-[#999999]">
+                  <p className="mx-auto mt-2 max-w-[230px] text-[11px] font-semibold leading-5 text-[#999999]">
                     Players will appear after playing tournaments.
                   </p>
-
                 </div>
-
               </div>
 
             ) : (
@@ -505,10 +527,16 @@ export default function LeaderboardPage() {
                 )
               )
             )}
+          </div>
 
+          {/* LEGEND */}
+
+          <div className="mt-3 px-1">
+            <p className="text-[9px] font-semibold leading-4 text-[#999999]">
+              MP = Matches Played • W = Wins • L = Losses • +/- = Goals Scored/Conceded • GD = Goal Difference
+            </p>
           </div>
         </section>
-
       </div>
 
       {/* =========================================
@@ -516,7 +544,6 @@ export default function LeaderboardPage() {
       ========================================= */}
 
       <BottomNavigation />
-
     </main>
   );
 }
@@ -545,7 +572,7 @@ function LeaderboardRow({
     <div
       className={`grid grid-cols-[28px_minmax(120px,1fr)_32px_28px_28px_52px_35px_42px] items-center border-t border-[#eeeeee] px-2 py-3 text-[11px] ${
         rank <= 3
-          ? "bg-[#fbfffc]"
+          ? "bg-[#fffdf2]"
           : "bg-white"
       }`}
     >
@@ -555,7 +582,6 @@ function LeaderboardRow({
       ========================================= */}
 
       <div className="font-black text-[#111111]">
-
         {rank === 1
           ? "🥇"
           : rank === 2
@@ -563,7 +589,6 @@ function LeaderboardRow({
           : rank === 3
           ? "🥉"
           : rank}
-
       </div>
 
       {/* =========================================
@@ -583,8 +608,13 @@ function LeaderboardRow({
 
         {/* PROFILE PHOTO */}
 
-        <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-[#eeeeee]">
-
+        <div
+          className={`h-8 w-8 shrink-0 overflow-hidden rounded-full ${
+            rank <= 3
+              ? "border-2 border-[#FFD600] bg-[#FFF7CC]"
+              : "border border-[#e5e5e5] bg-[#eeeeee]"
+          }`}
+        >
           {player.profilePhoto ? (
             <img
               src={
@@ -596,30 +626,24 @@ function LeaderboardRow({
               className="h-full w-full object-cover"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-[12px] font-black text-[#777777]">
-
+            <div className="flex h-full w-full items-center justify-center text-[12px] font-black text-[#111111]">
               {player.username
                 .charAt(0)
                 .toUpperCase()}
-
             </div>
           )}
-
         </div>
 
         {/* USERNAME */}
 
         <div className="min-w-0">
-
           <div className="truncate text-[12px] font-black text-[#111111]">
             {player.username}
           </div>
 
           {(player.tournamentWon > 0 ||
             player.tournamentRunner > 0) && (
-
-            <div className="mt-[2px] flex gap-1 text-[8px] font-bold text-[#999999]">
-
+            <div className="mt-[2px] flex gap-1 text-[8px] font-bold text-[#777777]">
               {player.tournamentWon >
                 0 && (
                 <span>
@@ -639,12 +663,9 @@ function LeaderboardRow({
                   }
                 </span>
               )}
-
             </div>
           )}
-
         </div>
-
       </button>
 
       {/* =========================================
@@ -690,13 +711,13 @@ function LeaderboardRow({
 
       {/* =========================================
           POINTS
-          NO GREEN ROUND BACKGROUND
       ========================================= */}
 
-      <div className="text-center text-[12px] font-black text-[#111111]">
-        {player.rankingPoints}
+      <div className="flex justify-center">
+        <div className="flex min-w-[34px] items-center justify-center rounded-[8px] bg-[#FFD600] px-2 py-[5px] text-center text-[11px] font-black text-[#111111]">
+          {player.rankingPoints}
+        </div>
       </div>
-
     </div>
   );
 }
@@ -709,13 +730,10 @@ function BottomNavigation() {
   const router = useRouter();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#e5e7eb] bg-white">
-
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#222222] bg-[#111111]">
       <div className="mx-auto grid h-[72px] max-w-md grid-cols-5">
 
-        {/* =======================================
-            TOURNAMENTS
-        ======================================= */}
+        {/* TOURNAMENTS */}
 
         <BottomNavItem
           icon="🏆"
@@ -725,9 +743,7 @@ function BottomNavigation() {
           }
         />
 
-        {/* =======================================
-            MY TOURNAMENTS
-        ======================================= */}
+        {/* MY TOURNAMENTS */}
 
         <BottomNavItem
           icon="🎮"
@@ -745,9 +761,7 @@ function BottomNavigation() {
           }
         />
 
-        {/* =======================================
-            DIVISION LEAGUE
-        ======================================= */}
+        {/* DIVISION LEAGUE */}
 
         <BottomNavItem
           icon="⚡"
@@ -765,9 +779,7 @@ function BottomNavigation() {
           }
         />
 
-        {/* =======================================
-            LEADERBOARD
-        ======================================= */}
+        {/* LEADERBOARD */}
 
         <BottomNavItem
           icon="🏅"
@@ -786,9 +798,7 @@ function BottomNavigation() {
           }
         />
 
-        {/* =======================================
-            PROFILE
-        ======================================= */}
+        {/* PROFILE */}
 
         <BottomNavItem
           icon="👤"
@@ -799,7 +809,6 @@ function BottomNavigation() {
             )
           }
         />
-
       </div>
     </nav>
   );
@@ -824,13 +833,12 @@ function BottomNavItem({
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-full flex-col items-center justify-center gap-[3px] ${
+      className={`flex h-full flex-col items-center justify-center gap-[3px] transition ${
         active
-          ? "text-[#111111]"
-          : "text-[#a6a6a6]"
+          ? "text-[#FFD600]"
+          : "text-[#8b8b8b]"
       }`}
     >
-
       <span className="flex h-[23px] items-center justify-center text-[19px] leading-none">
         {icon}
       </span>
@@ -838,13 +846,12 @@ function BottomNavItem({
       <span
         className={`text-[8px] leading-[10px] ${
           active
-            ? "font-black text-[#111111]"
-            : "font-bold text-[#a6a6a6]"
+            ? "font-black text-[#FFD600]"
+            : "font-bold text-[#8b8b8b]"
         }`}
       >
         {label}
       </span>
-
     </button>
   );
 }

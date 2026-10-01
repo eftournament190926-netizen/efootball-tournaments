@@ -87,7 +87,7 @@ function getTournamentImage(coins: number) {
 }
 
 /* =================================================
-   CATEGORY CHECK
+   CATEGORY
 ================================================= */
 
 function isSixteenPlayer(tournament: Tournament) {
@@ -110,9 +110,7 @@ function isSixteenPlayer(tournament: Tournament) {
 ================================================= */
 
 function formatDate(dateString: string) {
-  if (!dateString) {
-    return "";
-  }
+  if (!dateString) return "";
 
   const parts = dateString.split("-");
 
@@ -124,41 +122,30 @@ function formatDate(dateString: string) {
   const month = Number(parts[1]);
   const day = Number(parts[2]);
 
-  const date = new Date(year, month - 1, day);
+  const date = new Date(
+    year,
+    month - 1,
+    day
+  );
 
-  return date
-    .toLocaleDateString("en-US", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-    })
-    .toLowerCase();
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
 }
 
 /* =================================================
-   TIME TO MINUTES
-   Supports:
-
-   21:00
-   21:30
-   09:00
-   9:00 PM
+   TIME
 ================================================= */
 
 function timeToMinutes(time: string) {
-  if (!time) {
-    return 0;
-  }
+  if (!time) return 0;
 
   const clean = time.trim().toUpperCase();
 
-  /* -----------------------------------------------
-     24 HOUR FORMAT
-  ------------------------------------------------ */
-
-  const twentyFourHourMatch = clean.match(
-    /^(\d{1,2}):(\d{2})$/
-  );
+  const twentyFourHourMatch =
+    clean.match(/^(\d{1,2}):(\d{2})$/);
 
   if (twentyFourHourMatch) {
     const hour = Number(
@@ -179,13 +166,10 @@ function timeToMinutes(time: string) {
     }
   }
 
-  /* -----------------------------------------------
-     12 HOUR FORMAT
-  ------------------------------------------------ */
-
-  const twelveHourMatch = clean.match(
-    /^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/
-  );
+  const twelveHourMatch =
+    clean.match(
+      /^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/
+    );
 
   if (twelveHourMatch) {
     let hour = Number(
@@ -219,33 +203,16 @@ function timeToMinutes(time: string) {
   return 0;
 }
 
-/* =================================================
-   FORMAT TIME
-   Firebase 24-hour → UI 12-hour
-
-   21:00 → 9:00 PM
-   21:30 → 9:30 PM
-   00:00 → 12:00 AM
-   12:00 → 12:00 PM
-================================================= */
-
 function formatTime12Hour(time: string) {
-  if (!time) {
-    return "";
-  }
+  if (!time) return "";
 
   const clean = time.trim().toUpperCase();
 
-  /* -----------------------------------------------
-     24 HOUR FORMAT
-  ------------------------------------------------ */
-
-  const twentyFourHourMatch = clean.match(
-    /^(\d{1,2}):(\d{2})$/
-  );
+  const twentyFourHourMatch =
+    clean.match(/^(\d{1,2}):(\d{2})$/);
 
   if (twentyFourHourMatch) {
-    let hour = Number(
+    const hour = Number(
       twentyFourHourMatch[1]
     );
 
@@ -275,13 +242,10 @@ function formatTime12Hour(time: string) {
     }
   }
 
-  /* -----------------------------------------------
-     ALREADY 12 HOUR
-  ------------------------------------------------ */
-
-  const twelveHourMatch = clean.match(
-    /^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/
-  );
+  const twelveHourMatch =
+    clean.match(
+      /^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/
+    );
 
   if (twelveHourMatch) {
     const hour = Number(
@@ -304,7 +268,7 @@ function formatTime12Hour(time: string) {
 }
 
 /* =================================================
-   TOURNAMENT EXPIRY
+   EXPIRY
 ================================================= */
 
 function isTournamentExpired(
@@ -325,23 +289,11 @@ function isTournamentExpired(
     return false;
   }
 
-  const year = Number(
-    dateParts[0]
-  );
+  const year = Number(dateParts[0]);
+  const month = Number(dateParts[1]);
+  const day = Number(dateParts[2]);
 
-  const month = Number(
-    dateParts[1]
-  );
-
-  const day = Number(
-    dateParts[2]
-  );
-
-  if (
-    !year ||
-    !month ||
-    !day
-  ) {
+  if (!year || !month || !day) {
     return false;
   }
 
@@ -369,10 +321,7 @@ function isTournamentExpired(
       0
     );
 
-  return (
-    now >=
-    tournamentDateTime
-  );
+  return now >= tournamentDateTime;
 }
 
 /* =================================================
@@ -405,12 +354,10 @@ function TournamentCard({
     registered >= maxPlayers;
 
   return (
-    <div className="w-[226px] shrink-0 overflow-hidden rounded-[9px] border border-[#e2e5e8] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-
+    <div className="w-[238px] shrink-0 overflow-hidden rounded-[18px] border border-[#dedede] bg-white shadow-[0_6px_20px_rgba(0,0,0,0.08)]">
       {/* IMAGE */}
 
-      <div className="relative h-[112px] overflow-hidden bg-[#071426]">
-
+      <div className="relative h-[124px] overflow-hidden bg-[#111111]">
         <img
           src={getTournamentImage(
             tournament.coins
@@ -419,125 +366,104 @@ function TournamentCard({
           className="h-full w-full object-cover"
         />
 
-        <div className="absolute left-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-[8px] font-black text-[#071426] shadow-sm">
-          {tournament.maxPlayers} PLAYERS
+        <div className="absolute left-3 top-3 rounded-[8px] bg-[#FFD600] px-3 py-[6px] text-[9px] font-black text-[#111111] shadow-md">
+          {maxPlayers} PLAYERS
+        </div>
+      </div>
+
+      {/* DATE */}
+
+      <div className="flex items-center justify-between border-b border-[#eeeeee] bg-[#fff9d9] px-4 py-3">
+        <div>
+          <p className="text-[10px] font-black uppercase text-[#111111]">
+            {formatDate(
+              tournament.date
+            )}
+          </p>
+
+          <p className="mt-[2px] text-[9px] font-bold text-[#696969]">
+            {formatTime12Hour(
+              tournament.time
+            )}
+          </p>
         </div>
 
+        <div className="flex h-[28px] w-[28px] items-center justify-center rounded-full bg-[#111111] text-[13px]">
+          🎮
+        </div>
       </div>
 
-      {/* DATE / TIME */}
+      {/* DETAILS */}
 
-      <div className="bg-[#f7f9fa] px-4 py-2">
-
-        <p className="text-[10px] font-black text-[#111827]">
-          {formatDate(
-            tournament.date
-          )}
-        </p>
-
-        <p className="mt-1 text-[10px] font-bold text-[#111827]">
-          {formatTime12Hour(
-            tournament.time
-          )}
-        </p>
-
-      </div>
-
-      {/* CONTENT */}
-
-      <div className="px-4 pb-3 pt-3">
-
-        <div className="flex items-center">
-
-          <div className="w-1/2 border-r border-[#e5e7eb]">
-
-            <p className="text-[8px] font-medium text-[#8b949e]">
+      <div className="p-4">
+        <div className="flex">
+          <div className="w-1/2 border-r border-[#e5e5e5] pr-3">
+            <p className="text-[8px] font-bold uppercase tracking-wide text-[#999999]">
               Entry Fee
             </p>
 
-            <p className="mt-1 text-[11px] font-black text-[#111827]">
-              ₹
-              {
-                tournament.entryFee
-              }
+            <p className="mt-1 text-[14px] font-black text-[#111111]">
+              ₹{tournament.entryFee}
             </p>
-
           </div>
 
           <div className="w-1/2 pl-3">
-
-            <p className="text-[8px] font-medium text-[#8b949e]">
-              Prize Pool
+            <p className="text-[8px] font-bold uppercase tracking-wide text-[#999999]">
+              Winner Reward
             </p>
 
-            <p className="mt-1 text-[11px] font-black text-[#111827]">
-              {
-                tournament.coins
-              }{" "}
-              coin
+            <p className="mt-1 text-[14px] font-black text-[#087A43]">
+              {tournament.coins}
             </p>
 
+            <p className="text-[8px] font-black text-[#087A43]">
+              COINS
+            </p>
           </div>
-
         </div>
 
-        {/* PLAYER PROGRESS */}
+        {/* PROGRESS */}
 
-        <div className="mt-3">
+        <div className="mt-4">
+          <div className="mb-[5px] flex items-center justify-between">
+            <span className="text-[8px] font-black text-[#777777]">
+              PLAYERS
+            </span>
 
-          <div className="h-[5px] overflow-hidden rounded-full bg-[#e4e9ed]">
+            <span className="text-[8px] font-black text-[#111111]">
+              {registered}/{maxPlayers}
+            </span>
+          </div>
 
+          <div className="h-[6px] overflow-hidden rounded-full bg-[#e7e7e7]">
             <div
-              className="h-full rounded-full bg-[#00b85c]"
+              className="h-full rounded-full bg-[#087A43] transition-all"
               style={{
                 width: `${percentage}%`,
               }}
             />
-
           </div>
-
-          <div className="mt-1 flex justify-end">
-
-            <span className="text-[8px] font-bold text-[#737b84]">
-              {
-                registered
-              }{" "}
-              /{" "}
-              {
-                maxPlayers
-              }{" "}
-              PLAYERS
-            </span>
-
-          </div>
-
         </div>
 
-        {/* JOIN */}
+        {/* BUTTON */}
 
         {isFull ? (
-
           <button
             type="button"
             disabled
-            className="mt-3 w-full rounded-[6px] bg-[#d9dde1] py-[9px] text-[9px] font-black tracking-[0.04em] text-[#7b838b]"
+            className="mt-4 w-full rounded-[10px] bg-[#dddddd] py-[11px] text-[10px] font-black tracking-[0.05em] text-[#888888]"
           >
-            FULL
+            TOURNAMENT FULL
           </button>
-
         ) : (
-
           <Link
             href={`/tournament/${tournament.id}`}
-            className="mt-3 flex w-full items-center justify-center rounded-[6px] bg-[#00b85c] py-[9px] text-[9px] font-black tracking-[0.04em] text-white transition hover:bg-[#009f50] active:scale-[0.98]"
+            className="mt-4 flex w-full items-center justify-center rounded-[10px] bg-[#111111] py-[11px] text-[10px] font-black tracking-[0.06em] text-[#FFD600] shadow-md transition active:scale-[0.98]"
           >
-            JOIN NOW
+            JOIN NOW →
           </Link>
-
         )}
-
       </div>
-
     </div>
   );
 }
@@ -563,19 +489,13 @@ function TimeSelector({
           event.target.value
         )
       }
-      className="h-[34px] min-w-[120px] appearance-auto rounded-[8px] border border-[#d8dde2] bg-white px-3 text-[11px] font-black text-[#111827] outline-none"
+      className="h-[44px] min-w-[124px] appearance-auto rounded-[10px] border-2 border-[#111111] bg-white px-3 text-[11px] font-black text-[#111111] shadow-sm outline-none"
     >
-
-      {/* ALL TIMES */}
-
       <option value="">
         ALL TIMES
       </option>
 
-      {/* TIMES */}
-
       {times.map((time) => (
-
         <option
           key={time}
           value={time}
@@ -584,10 +504,66 @@ function TimeSelector({
             time
           )}
         </option>
-
       ))}
-
     </select>
+  );
+}
+
+/* =================================================
+   EMPTY STATE
+================================================= */
+
+function EmptyTournamentState() {
+  return (
+    <div className="flex min-h-[270px] items-center justify-center rounded-[17px] border border-[#dedede] bg-white px-5 shadow-[0_3px_12px_rgba(0,0,0,0.03)]">
+      <div className="text-center">
+        {/* TROPHY CIRCLE */}
+
+        <div className="mx-auto flex h-[76px] w-[76px] items-center justify-center rounded-full bg-[#FFF5C4]">
+          <span className="text-[38px]">
+            🏆
+          </span>
+        </div>
+
+        <p className="mt-5 text-[14px] font-black text-[#182033]">
+          No tournaments available
+        </p>
+
+        <p className="mt-2 text-[10px] font-medium text-[#8d94a1]">
+          No tournament scheduled for this date and time.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* =================================================
+   SECTION TITLE
+================================================= */
+
+function PlayerSectionTitle({
+  title,
+}: {
+  title: string;
+}) {
+  return (
+    <div className="relative flex h-[44px] min-w-[150px] items-center overflow-hidden rounded-[10px] bg-[#111111] px-4 pr-9 shadow-sm">
+      {/* ICON */}
+
+      <span className="mr-2 text-[17px]">
+        👥
+      </span>
+
+      {/* TEXT */}
+
+      <span className="relative z-10 text-[13px] font-black text-[#FFD600]">
+        {title}
+      </span>
+
+      {/* YELLOW DIAGONAL ACCENT */}
+
+      <div className="absolute -right-[10px] top-[-10px] h-[70px] w-[24px] rotate-[24deg] bg-[#FFD600]" />
+    </div>
   );
 }
 
@@ -604,14 +580,8 @@ function TournamentSection({
   tournaments: Tournament[];
   now: Date;
 }) {
-
-  /* -----------------------------------------------
-     REMOVE EXPIRED TOURNAMENTS
-  ------------------------------------------------ */
-
   const visibleTournaments =
     useMemo(() => {
-
       return tournaments.filter(
         (tournament) =>
           !isTournamentExpired(
@@ -619,19 +589,13 @@ function TournamentSection({
             now
           )
       );
-
     }, [
       tournaments,
       now,
     ]);
 
-  /* -----------------------------------------------
-     AVAILABLE TIMES
-  ------------------------------------------------ */
-
   const times =
     useMemo(() => {
-
       const uniqueTimes =
         Array.from(
           new Set(
@@ -649,33 +613,17 @@ function TournamentSection({
           timeToMinutes(a) -
           timeToMinutes(b)
       );
-
     }, [
       visibleTournaments,
     ]);
-
-  /* -----------------------------------------------
-     EMPTY = ALL TIMES
-
-     Important:
-     We DO NOT auto-select first time.
-  ------------------------------------------------ */
 
   const [
     selectedTime,
     setSelectedTime,
   ] = useState("");
 
-  /* -----------------------------------------------
-     FILTER
-
-     Empty selectedTime means:
-     SHOW ALL TOURNAMENTS
-  ------------------------------------------------ */
-
   const filteredTournaments =
     useMemo(() => {
-
       if (!selectedTime) {
         return visibleTournaments;
       }
@@ -685,26 +633,19 @@ function TournamentSection({
           tournament.time ===
           selectedTime
       );
-
     }, [
       visibleTournaments,
       selectedTime,
     ]);
 
   return (
-    <section className="bg-[#eeeeee] px-2 pb-4 pt-3">
+    <section className="bg-[#f5f5f5] px-4 pb-7 pt-5">
+      {/* TOP */}
 
-      {/* SECTION HEADER */}
-
-      <div className="mb-3 flex items-center justify-between px-1">
-
-        <div className="rounded-[8px] border border-[#cfd4d9] bg-white px-4 py-[7px]">
-
-          <h2 className="text-[11px] font-black text-[#111827]">
-            {title}
-          </h2>
-
-        </div>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <PlayerSectionTitle
+          title={title}
+        />
 
         <TimeSelector
           value={selectedTime}
@@ -713,63 +654,35 @@ function TournamentSection({
             setSelectedTime
           }
         />
-
       </div>
 
-      {/* CARDS */}
+      {/* CONTENT */}
 
-      <div className="min-h-[280px]">
-
-        {filteredTournaments.length ===
-        0 ? (
-
-          <div className="flex min-h-[240px] items-center justify-center rounded-[10px] bg-white">
-
-            <div className="text-center">
-
-              <p className="text-[11px] font-bold text-[#888888]">
-                No tournaments available
-              </p>
-
-              <p className="mt-1 text-[9px] text-[#a2a8ae]">
-                No tournament scheduled for this date and time.
-              </p>
-
-            </div>
-
-          </div>
-
-        ) : (
-
-          <div className="scrollbar-none flex gap-3 overflow-x-auto pb-1">
-
-            {filteredTournaments.map(
-              (tournament) => (
-
-                <TournamentCard
-                  key={
-                    tournament.id
-                  }
-                  tournament={
-                    tournament
-                  }
-                />
-
-              )
-            )}
-
-          </div>
-
-        )}
-
-      </div>
-
+      {filteredTournaments.length ===
+      0 ? (
+        <EmptyTournamentState />
+      ) : (
+        <div className="scrollbar-none flex gap-4 overflow-x-auto pb-2">
+          {filteredTournaments.map(
+            (tournament) => (
+              <TournamentCard
+                key={
+                  tournament.id
+                }
+                tournament={
+                  tournament
+                }
+              />
+            )
+          )}
+        </div>
+      )}
     </section>
   );
 }
 
 /* =================================================
-   BOTTOM NAV ITEM
+   BOTTOM NAV
 ================================================= */
 
 function BottomNavItem({
@@ -787,44 +700,43 @@ function BottomNavItem({
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-full flex-col items-center justify-center gap-[3px] ${
-        active
-          ? "text-[#111111]"
-          : "text-[#a6a6a6]"
-      }`}
+      className="relative flex h-full flex-col items-center justify-center"
     >
+      {/* TOP ACTIVE LINE */}
 
-      <span className="flex h-[23px] items-center justify-center text-[19px] leading-none">
+      {active && (
+        <div className="absolute left-1/2 top-0 h-[4px] w-[56px] -translate-x-1/2 rounded-b-full bg-[#FFD600]" />
+      )}
+
+      <span
+        className={`flex h-[28px] items-center justify-center text-[21px] ${
+          active
+            ? ""
+            : "grayscale opacity-60"
+        }`}
+      >
         {icon}
       </span>
 
       <span
-        className={`text-[8px] leading-[10px] ${
+        className={`mt-[2px] text-center text-[8px] leading-[10px] ${
           active
-            ? "font-black text-[#111111]"
-            : "font-bold text-[#a6a6a6]"
+            ? "font-black text-[#FFD600]"
+            : "font-bold text-[#929292]"
         }`}
       >
         {label}
       </span>
-
     </button>
   );
 }
 
-/* =================================================
-   BOTTOM NAVIGATION
-================================================= */
-
 function BottomNavigation() {
-
   const router = useRouter();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#e5e7eb] bg-white">
-
-      <div className="mx-auto grid h-[72px] max-w-md grid-cols-5">
-
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[#0b0b0b] shadow-[0_-6px_20px_rgba(0,0,0,0.15)]">
+      <div className="mx-auto grid h-[78px] max-w-md grid-cols-5">
         <BottomNavItem
           icon="🏆"
           label="Tournaments"
@@ -891,23 +803,16 @@ function BottomNavigation() {
             )
           }
         />
-
       </div>
-
     </nav>
   );
 }
 
 /* =================================================
-   HOME PAGE
+   HOME
 ================================================= */
 
 export default function HomePage() {
-
-  /* =================================================
-     DATE TABS
-  ================================================= */
-
   const [dateTabs] =
     useState<DateTab[]>(
       () => createDateTabs()
@@ -922,46 +827,15 @@ export default function HomePage() {
       ""
   );
 
-  /* =================================================
-     CURRENT TIME
-
-     Updates every 30 seconds.
-  ================================================= */
-
   const [now, setNow] =
     useState<Date>(
       () => new Date()
     );
 
-  useEffect(() => {
-
-    const timer =
-      window.setInterval(() => {
-
-        setNow(new Date());
-
-      }, 30 * 1000);
-
-    return () => {
-
-      window.clearInterval(
-        timer
-      );
-
-    };
-
-  }, []);
-
-  /* =================================================
-     TOURNAMENTS
-  ================================================= */
-
   const [
     tournaments,
     setTournaments,
-  ] = useState<Tournament[]>(
-    []
-  );
+  ] = useState<Tournament[]>([]);
 
   const [
     profilePhoto,
@@ -974,11 +848,27 @@ export default function HomePage() {
   ] = useState(true);
 
   /* =================================================
+     CLOCK
+  ================================================= */
+
+  useEffect(() => {
+    const timer =
+      window.setInterval(() => {
+        setNow(new Date());
+      }, 30 * 1000);
+
+    return () => {
+      window.clearInterval(
+        timer
+      );
+    };
+  }, []);
+
+  /* =================================================
      FIREBASE TOURNAMENTS
   ================================================= */
 
   useEffect(() => {
-
     const tournamentsQuery =
       query(
         collection(
@@ -994,19 +884,17 @@ export default function HomePage() {
     const unsubscribe =
       onSnapshot(
         tournamentsQuery,
-        (snapshot) => {
 
+        (snapshot) => {
           const list:
             Tournament[] = [];
 
           snapshot.forEach(
             (document) => {
-
               const data =
                 document.data();
 
               list.push({
-
                 id: document.id,
 
                 coins: Number(
@@ -1044,9 +932,7 @@ export default function HomePage() {
                   data.status ||
                     "upcoming"
                 ),
-
               });
-
             }
           );
 
@@ -1055,27 +941,22 @@ export default function HomePage() {
           );
 
           setLoading(false);
-
         },
-        (error) => {
 
+        (error) => {
           console.error(
             "Error loading tournaments:",
             error
           );
 
-          setTournaments(
-            []
-          );
+          setTournaments([]);
 
           setLoading(false);
-
         }
       );
 
     return () =>
       unsubscribe();
-
   }, []);
 
   /* =================================================
@@ -1083,22 +964,17 @@ export default function HomePage() {
   ================================================= */
 
   useEffect(() => {
-
     const unsubscribe =
       onAuthStateChanged(
         auth,
+
         async (user) => {
-
           if (!user) {
-
             setProfilePhoto("");
-
             return;
-
           }
 
           try {
-
             const userSnap =
               await getDoc(
                 doc(
@@ -1111,7 +987,6 @@ export default function HomePage() {
             if (
               userSnap.exists()
             ) {
-
               const data =
                 userSnap.data();
 
@@ -1119,33 +994,26 @@ export default function HomePage() {
                 data.profilePhoto ||
                   ""
               );
-
             }
-
           } catch (error) {
-
             console.error(
               "Error loading profile photo:",
               error
             );
-
           }
-
         }
       );
 
     return () =>
       unsubscribe();
-
   }, []);
 
   /* =================================================
-     SELECTED DATE TOURNAMENTS
+     FILTER SELECTED DATE
   ================================================= */
 
   const selectedDateTournaments =
     useMemo(() => {
-
       return tournaments.filter(
         (tournament) =>
           tournament.date ===
@@ -1155,7 +1023,6 @@ export default function HomePage() {
           tournament.status !==
             "completed"
       );
-
     }, [
       tournaments,
       selectedDate,
@@ -1167,14 +1034,12 @@ export default function HomePage() {
 
   const tournaments16 =
     useMemo(() => {
-
       return selectedDateTournaments.filter(
         (tournament) =>
           isSixteenPlayer(
             tournament
           )
       );
-
     }, [
       selectedDateTournaments,
     ]);
@@ -1185,14 +1050,12 @@ export default function HomePage() {
 
   const tournaments8 =
     useMemo(() => {
-
       return selectedDateTournaments.filter(
         (tournament) =>
           !isSixteenPlayer(
             tournament
           )
       );
-
     }, [
       selectedDateTournaments,
     ]);
@@ -1202,73 +1065,65 @@ export default function HomePage() {
   ================================================= */
 
   return (
-    <main className="min-h-screen bg-[#f1f1f1]">
+    <main className="min-h-screen bg-[#e9e9e9]">
+      <div className="mx-auto min-h-screen max-w-md overflow-hidden bg-white pb-[78px] shadow-[0_0_40px_rgba(0,0,0,0.12)]">
+        {/* ============================================
+            YELLOW HEADER
+        ============================================ */}
 
-      <div className="mx-auto min-h-screen max-w-md bg-white pb-[88px] shadow-[0_0_40px_rgba(0,0,0,0.08)]">
-
-        {/* HEADER */}
-
-        <header className="bg-white">
-
-          <div className="flex h-[74px] items-center justify-between px-4">
-
+        <header className="bg-[#FFD600]">
+          <div className="flex h-[78px] items-center justify-between px-5">
             {/* LOGO */}
-<img
-  src="/logo.png"
-  alt="eFOOTBALL TOURNAMENTS"
-  className="h-[48px] w-[185px] object-contain object-left"
-/>
+
+            <img
+              src="/logo.png"
+              alt="eFOOTBALL TOURNAMENTS"
+              className="h-[52px] w-[190px] object-contain object-left"
+            />
 
             {/* PROFILE */}
 
             <Link
               href="/profile"
-              className="flex h-[38px] w-[38px] items-center justify-center overflow-hidden rounded-full border border-[#e2e5e8] bg-[#f2f4f5]"
+              className="flex h-[44px] w-[44px] items-center justify-center overflow-hidden rounded-full border-[3px] border-[#111111] bg-white shadow-[0_3px_8px_rgba(0,0,0,0.18)]"
             >
-
               {profilePhoto ? (
-
                 <img
-                  src={profilePhoto}
+                  src={
+                    profilePhoto
+                  }
                   alt="Profile"
                   className="h-full w-full object-cover"
                 />
-
               ) : (
-
-                <span className="text-[17px]">
+                <span className="text-[19px]">
                   👤
                 </span>
-
               )}
-
             </Link>
-
           </div>
-
         </header>
 
-        {/* HERO */}
+        {/* ============================================
+            HERO
+        ============================================ */}
 
         <section className="w-full overflow-hidden bg-white">
-
           <img
             src="/images/hero/banner.png"
             alt="eFootball Tournament"
             className="block h-auto w-full"
           />
-
         </section>
 
-        {/* DATE TABS */}
+        {/* ============================================
+            DATE TABS
+        ============================================ */}
 
-        <section className="sticky top-0 z-30 border-b border-[#e6e7e8] bg-white px-2 py-3">
-
+        <section className="sticky top-0 z-30 border-b border-[#eeeeee] bg-white px-3 py-3 shadow-[0_3px_10px_rgba(0,0,0,0.05)]">
           <div className="scrollbar-none flex gap-2 overflow-x-auto">
-
             {dateTabs.map(
               (item) => {
-
                 const active =
                   selectedDate ===
                   item.key;
@@ -1284,10 +1139,10 @@ export default function HomePage() {
                         item.key
                       )
                     }
-                    className={`shrink-0 rounded-[10px] px-[17px] py-[8px] text-[10px] font-black transition ${
+                    className={`shrink-0 rounded-[11px] px-[20px] py-[11px] text-[10px] font-black transition ${
                       active
-                        ? "bg-[#00b85c] text-white shadow-[0_1px_3px_rgba(0,0,0,0.12)]"
-                        : "bg-[#f1f2f3] text-[#777777]"
+                        ? "bg-[#FFD600] text-[#111111] shadow-[0_4px_10px_rgba(255,214,0,0.30)]"
+                        : "bg-[#f2f2f2] text-[#697080]"
                     }`}
                   >
                     {
@@ -1295,30 +1150,27 @@ export default function HomePage() {
                     }
                   </button>
                 );
-
               }
             )}
-
           </div>
-
         </section>
 
-        {/* TOURNAMENT AREA */}
+        {/* ============================================
+            TOURNAMENTS
+        ============================================ */}
 
         {loading ? (
+          <div className="flex min-h-[350px] items-center justify-center bg-[#f5f5f5]">
+            <div className="text-center">
+              <div className="mx-auto h-[34px] w-[34px] animate-spin rounded-full border-[4px] border-[#dddddd] border-t-[#FFD600]" />
 
-          <div className="bg-[#eeeeee] px-4 py-12 text-center">
-
-            <p className="text-[11px] font-bold text-[#888888]">
-              Loading tournaments...
-            </p>
-
+              <p className="mt-4 text-[11px] font-black text-[#777777]">
+                Loading tournaments...
+              </p>
+            </div>
           </div>
-
         ) : (
-
           <>
-
             <TournamentSection
               title="16 Players"
               tournaments={
@@ -1327,6 +1179,8 @@ export default function HomePage() {
               now={now}
             />
 
+            <div className="h-[1px] bg-[#e8e8e8]" />
+
             <TournamentSection
               title="8 Players"
               tournaments={
@@ -1334,17 +1188,15 @@ export default function HomePage() {
               }
               now={now}
             />
-
           </>
-
         )}
 
-        {/* BOTTOM NAV */}
+        {/* ============================================
+            BOTTOM NAVIGATION
+        ============================================ */}
 
         <BottomNavigation />
-
       </div>
-
     </main>
   );
 }
