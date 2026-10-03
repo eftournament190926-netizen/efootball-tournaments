@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
 
@@ -30,6 +30,59 @@ type UserData = {
   tournamentStats?: TournamentStats;
 };
 
+const PLAYER_AVATARS = [
+  {
+    id: "raphinha",
+    name: "Raphinha",
+    image: "/player-avatars/raphinha.png",
+  },
+  {
+    id: "ronaldinho",
+    name: "Ronaldinho",
+    image: "/player-avatars/ronaldinho.png",
+  },
+  {
+    id: "ronaldo",
+    name: "Ronaldo",
+    image: "/player-avatars/ronaldo.png",
+  },
+  {
+    id: "coutinho",
+    name: "Coutinho",
+    image: "/player-avatars/coutinho.png",
+  },
+  {
+    id: "yamal",
+    name: "Yamal",
+    image: "/player-avatars/yamal.png",
+  },
+  {
+    id: "beckham",
+    name: "Beckham",
+    image: "/player-avatars/beckham.png",
+  },
+  {
+    id: "di-maria",
+    name: "Di Maria",
+    image: "/player-avatars/di-maria.png",
+  },
+  {
+    id: "dybala",
+    name: "Dybala",
+    image: "/player-avatars/dybala.png",
+  },
+  {
+    id: "messi",
+    name: "Messi",
+    image: "/player-avatars/messi.png",
+  },
+  {
+    id: "neymar",
+    name: "Neymar",
+    image: "/player-avatars/neymar.png",
+  },
+];
+
 /* =================================================
    PROFILE PAGE
 ================================================= */
@@ -45,6 +98,13 @@ export default function ProfilePage() {
 
   const [loggingOut, setLoggingOut] =
     useState(false);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+
+const [selectedAvatar, setSelectedAvatar] = useState("");
+
+const [savingAvatar, setSavingAvatar] = useState(false);
+
+const [avatarError, setAvatarError] = useState("");
 
   /* -----------------------------------------------
      LOAD USER
@@ -113,6 +173,53 @@ export default function ProfilePage() {
       setLoggingOut(false);
     }
   }
+
+  async function handleSaveAvatar() {
+  if (!auth.currentUser) return;
+
+  if (!selectedAvatar) {
+    setAvatarError("Please select an avatar.");
+    return;
+  }
+
+  try {
+    setSavingAvatar(true);
+    setAvatarError("");
+
+    const userRef = doc(
+      db,
+      "users",
+      auth.currentUser.uid
+    );
+
+    await updateDoc(userRef, {
+      profilePhoto: selectedAvatar,
+      updatedAt: serverTimestamp(),
+    });
+
+    setUserData((current) => {
+      if (!current) return current;
+
+      return {
+        ...current,
+        profilePhoto: selectedAvatar,
+      };
+    });
+
+    setShowAvatarPicker(false);
+  } catch (error) {
+    console.error(
+      "Failed to update avatar:",
+      error
+    );
+
+    setAvatarError(
+      "Failed to update avatar. Please try again."
+    );
+  } finally {
+    setSavingAvatar(false);
+  }
+}
 
   /* -----------------------------------------------
      LOADING
@@ -213,24 +320,37 @@ export default function ProfilePage() {
             {/* PROFILE PHOTO */}
 
             <div className="relative">
-              <div className="h-[86px] w-[86px] shrink-0 overflow-hidden rounded-full border-[4px] border-[#111111] bg-white shadow-[0_5px_15px_rgba(0,0,0,0.18)]">
-                {userData?.profilePhoto ? (
-                  <img
-                    src={userData.profilePhoto}
-                    alt="Profile"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-white text-[32px]">
-                    👤
-                  </div>
-                )}
-              </div>
+  <button
+    type="button"
+    onClick={() => {
+      setSelectedAvatar(
+        userData?.profilePhoto || ""
+      );
+      setAvatarError("");
+      setShowAvatarPicker(true);
+    }}
+    className="relative block"
+    aria-label="Change profile avatar"
+  >
+    <div className="h-[86px] w-[86px] shrink-0 overflow-hidden rounded-full border-[4px] border-[#111111] bg-white shadow-[0_5px_15px_rgba(0,0,0,0.18)]">
+      {userData?.profilePhoto ? (
+        <img
+          src={userData.profilePhoto}
+          alt="Profile"
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-white text-[32px]">
+          👤
+        </div>
+      )}
+    </div>
 
-              <div className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-[3px] border-[#FFD600] bg-[#111111] text-[11px]">
-                🎮
-              </div>
-            </div>
+    <div className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-[3px] border-[#FFD600] bg-[#111111] text-[11px]">
+      ✏️
+    </div>
+  </button>
+</div>
 
             {/* USERNAME / KONAMI */}
 
@@ -443,6 +563,129 @@ export default function ProfilePage() {
       =========================================== */}
 
       <BottomNavigation />
+
+      {/* ===========================================
+    CHANGE AVATAR MODAL
+=========================================== */}
+
+{showAvatarPicker && (
+  <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 sm:items-center sm:px-4">
+
+    <div className="max-h-[88vh] w-full max-w-md overflow-y-auto rounded-t-[28px] bg-white p-5 shadow-2xl sm:rounded-[28px]">
+
+      {/* HEADER */}
+
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-[22px] font-black text-[#111111]">
+            Choose Your Player
+          </h2>
+
+          <p className="mt-1 text-[11px] font-medium text-[#888888]">
+            Select your new profile avatar
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            setShowAvatarPicker(false)
+          }
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eeeeee] text-[18px] font-black text-[#111111]"
+        >
+          ×
+        </button>
+      </div>
+
+      {/* AVATARS */}
+
+      <div className="mt-5 grid grid-cols-3 gap-3">
+        {PLAYER_AVATARS.map((avatar) => {
+          const selected =
+            selectedAvatar === avatar.image;
+
+          return (
+            <button
+              key={avatar.id}
+              type="button"
+              onClick={() => {
+                setSelectedAvatar(avatar.image);
+                setAvatarError("");
+              }}
+              className={`relative overflow-hidden rounded-[17px] border-[3px] bg-[#eeeeee] transition active:scale-[0.97] ${
+                selected
+                  ? "border-[#FFD600]"
+                  : "border-transparent"
+              }`}
+            >
+              <div className="aspect-square overflow-hidden">
+                <img
+                  src={avatar.image}
+                  alt={avatar.name}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+
+              <div
+                className={`px-1 py-2 text-[9px] font-black ${
+                  selected
+                    ? "bg-[#FFD600] text-[#111111]"
+                    : "bg-[#111111] text-white"
+                }`}
+              >
+                {avatar.name}
+              </div>
+
+              {selected && (
+                <div className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-[#FFD600] text-[12px] font-black text-black shadow">
+                  ✓
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ERROR */}
+
+      {avatarError && (
+        <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-[11px] font-bold text-red-600">
+          {avatarError}
+        </div>
+      )}
+
+      {/* BUTTONS */}
+
+      <div className="mt-5 grid grid-cols-2 gap-3">
+
+        <button
+          type="button"
+          disabled={savingAvatar}
+          onClick={() =>
+            setShowAvatarPicker(false)
+          }
+          className="h-12 rounded-xl border border-[#dddddd] bg-white text-[11px] font-black text-[#777777]"
+        >
+          CANCEL
+        </button>
+
+        <button
+          type="button"
+          disabled={
+            savingAvatar || !selectedAvatar
+          }
+          onClick={handleSaveAvatar}
+          className="h-12 rounded-xl bg-[#111111] text-[11px] font-black text-[#FFD600] transition active:scale-[0.98] disabled:opacity-50"
+        >
+          {savingAvatar
+            ? "SAVING..."
+            : "SAVE AVATAR"}
+        </button>
+
+      </div>
+    </div>
+  </div>
+)}
     </main>
   );
 }

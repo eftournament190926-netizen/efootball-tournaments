@@ -1,11 +1,72 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useState } from "react";
+import { FormEvent, useState } from "react";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 import { auth, db } from "@/lib/firebase";
+
+/* =================================================
+   PLAYER AVATARS
+================================================= */
+
+const PLAYER_AVATARS = [
+  {
+    id: "raphinha",
+    name: "Raphinha",
+    image: "/player-avatars/raphinha.png",
+  },
+  {
+    id: "ronaldinho",
+    name: "Ronaldinho",
+    image: "/player-avatars/ronaldinho.png",
+  },
+  {
+    id: "ronaldo",
+    name: "Ronaldo",
+    image: "/player-avatars/ronaldo.png",
+  },
+  {
+    id: "coutinho",
+    name: "Coutinho",
+    image: "/player-avatars/coutinho.png",
+  },
+  {
+    id: "yamal",
+    name: "Yamal",
+    image: "/player-avatars/yamal.png",
+  },
+  {
+    id: "beckham",
+    name: "Beckham",
+    image: "/player-avatars/beckham.png",
+  },
+  {
+    id: "di-maria",
+    name: "Di Maria",
+    image: "/player-avatars/di-maria.png",
+  },
+  {
+    id: "dybala",
+    name: "Dybala",
+    image: "/player-avatars/dybala.png",
+  },
+  {
+    id: "messi",
+    name: "Messi",
+    image: "/player-avatars/messi.png",
+  },
+  {
+    id: "neymar",
+    name: "Neymar",
+    image: "/player-avatars/neymar.png",
+  },
+];
+
+/* =================================================
+   SIGNUP PAGE
+================================================= */
 
 export default function SignupPage() {
   const router = useRouter();
@@ -15,67 +76,15 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
-  const [preview, setPreview] = useState("");
+  const [selectedAvatar, setSelectedAvatar] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      setError("Please select an image file.");
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setError("Profile photo must be less than 5MB.");
-      return;
-    }
-
-    setError("");
-    setProfilePhoto(file);
-    setPreview(URL.createObjectURL(file));
-  }
-
-  async function uploadProfilePhoto(file: File) {
-    const cloudName =
-      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "";
-
-    const uploadPreset =
-      process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "";
-
-    if (!cloudName || !uploadPreset) {
-      throw new Error("Cloudinary configuration is missing.");
-    }
-
-    const formData = new FormData();
-
-    formData.append("file", file);
-    formData.append("upload_preset", uploadPreset);
-
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
-      {
-        method: "POST",
-        body: formData,
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data?.error?.message || "Profile photo upload failed."
-      );
-    }
-
-    return data.secure_url as string;
-  }
+  /* =================================================
+     SUBMIT
+  ================================================= */
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -88,11 +97,6 @@ export default function SignupPage() {
     const cleanUsername = username.trim();
     const cleanKonamiId = konamiId.trim();
     const cleanEmail = email.trim();
-
-    if (!profilePhoto) {
-      setError("Please select a profile photo.");
-      return;
-    }
 
     if (!cleanUsername) {
       setError("Please enter your eFootball username.");
@@ -117,7 +121,8 @@ export default function SignupPage() {
     try {
       setLoading(true);
 
-      // Create Firebase Authentication account
+      /* CREATE FIREBASE AUTH ACCOUNT */
+
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         cleanEmail,
@@ -126,27 +131,27 @@ export default function SignupPage() {
 
       const user = userCredential.user;
 
-      // Upload profile photo to Cloudinary
-      const profilePhotoUrl = await uploadProfilePhoto(profilePhoto);
+      /* CREATE FIRESTORE USER */
 
-      // Create Firestore user document
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         email: cleanEmail,
         konamiId: cleanKonamiId,
         username: cleanUsername,
-        profilePhoto: profilePhotoUrl,
+
+        // Local avatar path
+        profilePhoto: selectedAvatar,
 
         tournamentStats: {
-  matches: 0,
-  wins: 0,
-  losses: 0,
-  goals: 0,
-  conceded: 0,
-  tournamentPlayed: 0,
-  tournamentWon: 0,
-  tournamentRunner: 0,
-},
+          matches: 0,
+          wins: 0,
+          losses: 0,
+          goals: 0,
+          conceded: 0,
+          tournamentPlayed: 0,
+          tournamentWon: 0,
+          tournamentRunner: 0,
+        },
 
         divisionStats: {
           matches: 0,
@@ -189,84 +194,157 @@ export default function SignupPage() {
     }
   }
 
+  /* =================================================
+     UI
+  ================================================= */
+
   return (
-    <main className="min-h-screen bg-white px-5 py-8 text-slate-900">
+    <main className="min-h-screen bg-[#eeeeee] px-5 py-8 text-[#111111]">
       <div className="mx-auto w-full max-w-md">
 
-        {/* Header */}
+        {/* HEADER */}
+
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-black tracking-tight">
             Create Account
           </h1>
 
-          <p className="mt-2 text-sm text-slate-500">
+          <p className="mt-2 text-sm text-[#777777]">
             Join the eFootball Tournament
           </p>
         </div>
 
-        {/* Signup Card */}
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        {/* SIGNUP CARD */}
+
+        <div className="rounded-[26px] border border-[#dddddd] bg-white p-5 shadow-sm">
+
           <form onSubmit={handleSubmit} className="space-y-5">
 
-            {/* Profile Photo */}
-            <div className="flex flex-col items-center">
-              <label
-                htmlFor="profilePhoto"
-                className="group relative cursor-pointer"
-              >
-                <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border-4 border-slate-100 bg-slate-100">
+            {/* =========================================
+                AVATAR SELECTOR
+            ========================================= */}
 
-                  {preview ? (
-                    <img
-                      src={preview}
-                      alt="Profile preview"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <svg
-                      width="42"
-                      height="42"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      className="text-slate-400"
+            <div>
+              <div className="mb-4 text-center">
+                <h2 className="text-[18px] font-black">
+                  Choose Your Player
+                </h2>
+
+                <p className="mt-1 text-xs text-[#888888]">
+                  Select a profile avatar
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+
+                {PLAYER_AVATARS.map((avatar) => {
+                  const selected =
+                    selectedAvatar === avatar.image;
+
+                  return (
+                    <button
+                      key={avatar.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedAvatar(avatar.image);
+                        setError("");
+                      }}
+                      className={`relative overflow-hidden rounded-[18px] border-[3px] bg-[#f3f3f3] transition active:scale-[0.97] ${
+                        selected
+                          ? "border-[#FFD600]"
+                          : "border-transparent"
+                      }`}
                     >
-                      <path d="M20 21a8 8 0 0 0-16 0" />
-                      <circle cx="12" cy="7" r="4" />
-                    </svg>
-                  )}
+                      {/* IMAGE */}
+
+                      <div className="aspect-square w-full overflow-hidden">
+                        <img
+                          src={avatar.image}
+                          alt={avatar.name}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+
+                      {/* NAME */}
+
+                      <div
+                        className={`px-1 py-2 text-center text-[10px] font-black ${
+                          selected
+                            ? "bg-[#FFD600] text-black"
+                            : "bg-[#111111] text-white"
+                        }`}
+                      >
+                        {avatar.name}
+                      </div>
+
+                      {/* SELECTED CHECK */}
+
+                      {selected && (
+                        <div className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-[#FFD600] text-[13px] font-black text-black shadow">
+                          ✓
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+
+              </div>
+
+              {/* OPTIONAL AVATAR */}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedAvatar("");
+                  setError("");
+                }}
+                className={`mt-3 h-11 w-full rounded-xl border text-xs font-black transition ${
+                  selectedAvatar === ""
+                    ? "border-[#FFD600] bg-[#fff9d6] text-black"
+                    : "border-[#dddddd] bg-white text-[#777777]"
+                }`}
+              >
+                Continue Without Avatar
+              </button>
+
+              {/* SELECTED AVATAR PREVIEW */}
+
+              {selectedAvatar && (
+                <div className="mt-4 flex items-center gap-3 rounded-2xl bg-[#111111] p-3">
+
+                  <img
+                    src={selectedAvatar}
+                    alt="Selected avatar"
+                    className="h-12 w-12 rounded-full border-2 border-[#FFD600] object-cover"
+                  />
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#888888]">
+                      Selected Avatar
+                    </p>
+
+                    <p className="mt-0.5 text-sm font-black text-white">
+                      {
+                        PLAYER_AVATARS.find(
+                          (avatar) =>
+                            avatar.image === selectedAvatar
+                        )?.name
+                      }
+                    </p>
+                  </div>
+
+                  <div className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-[#FFD600] text-xs font-black text-black">
+                    ✓
+                  </div>
+
                 </div>
-
-                <div className="absolute bottom-0 right-0 flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-white shadow">
-                  <svg
-                    width="17"
-                    height="17"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                  </svg>
-                </div>
-              </label>
-
-              <input
-                id="profilePhoto"
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={handlePhotoChange}
-                className="hidden"
-              />
-
-              <p className="mt-3 text-xs text-slate-500">
-                Add profile photo
-              </p>
+              )}
             </div>
 
-            {/* eFootball Username */}
+            {/* =========================================
+                EFOOTBALL USERNAME
+            ========================================= */}
+
             <div>
               <label
                 htmlFor="username"
@@ -279,15 +357,20 @@ export default function SignupPage() {
                 id="username"
                 type="text"
                 value={username}
-                onChange={(event) => setUsername(event.target.value)}
+                onChange={(event) =>
+                  setUsername(event.target.value)
+                }
                 placeholder="Enter your eFootball username"
                 autoComplete="username"
-                className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-slate-900 focus:bg-white"
+                className="h-12 w-full rounded-xl border border-[#dddddd] bg-[#f7f7f7] px-4 text-sm outline-none transition focus:border-[#FFD600] focus:bg-white"
                 required
               />
             </div>
 
-            {/* Konami ID */}
+            {/* =========================================
+                KONAMI ID
+            ========================================= */}
+
             <div>
               <label
                 htmlFor="konamiId"
@@ -300,15 +383,20 @@ export default function SignupPage() {
                 id="konamiId"
                 type="text"
                 value={konamiId}
-                onChange={(event) => setKonamiId(event.target.value)}
+                onChange={(event) =>
+                  setKonamiId(event.target.value)
+                }
                 placeholder="Enter your User ID"
                 autoComplete="off"
-                className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-slate-900 focus:bg-white"
+                className="h-12 w-full rounded-xl border border-[#dddddd] bg-[#f7f7f7] px-4 text-sm outline-none transition focus:border-[#FFD600] focus:bg-white"
                 required
               />
             </div>
 
-            {/* Email */}
+            {/* =========================================
+                EMAIL
+            ========================================= */}
+
             <div>
               <label
                 htmlFor="email"
@@ -321,15 +409,20 @@ export default function SignupPage() {
                 id="email"
                 type="email"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) =>
+                  setEmail(event.target.value)
+                }
                 placeholder="Enter your email"
                 autoComplete="email"
-                className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-slate-900 focus:bg-white"
+                className="h-12 w-full rounded-xl border border-[#dddddd] bg-[#f7f7f7] px-4 text-sm outline-none transition focus:border-[#FFD600] focus:bg-white"
                 required
               />
             </div>
 
-            {/* Password */}
+            {/* =========================================
+                PASSWORD
+            ========================================= */}
+
             <div>
               <label
                 htmlFor="password"
@@ -342,54 +435,67 @@ export default function SignupPage() {
                 id="password"
                 type="password"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) =>
+                  setPassword(event.target.value)
+                }
                 placeholder="Create a password"
                 autoComplete="new-password"
-                className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-slate-900 focus:bg-white"
+                className="h-12 w-full rounded-xl border border-[#dddddd] bg-[#f7f7f7] px-4 text-sm outline-none transition focus:border-[#FFD600] focus:bg-white"
                 required
                 minLength={6}
               />
 
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-2 text-xs text-[#999999]">
                 Minimum 6 characters
               </p>
             </div>
 
-            {/* Error */}
+            {/* ERROR */}
+
             {error && (
               <div className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
                 {error}
               </div>
             )}
 
-            {/* Success */}
+            {/* SUCCESS */}
+
             {success && (
               <div className="rounded-xl bg-green-50 px-4 py-3 text-sm font-medium text-green-600">
                 {success}
               </div>
             )}
 
-            {/* Submit */}
+            {/* SUBMIT */}
+
             <button
               type="submit"
               disabled={loading}
-              className="h-12 w-full rounded-xl bg-slate-900 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-12 w-full rounded-xl bg-[#111111] text-sm font-black text-[#FFD600] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? "Creating account..." : "Create Account"}
+              {loading
+                ? "Creating account..."
+                : "Create Account"}
             </button>
+
           </form>
 
-          {/* Login */}
-          <div className="mt-6 text-center text-sm text-slate-500">
+          {/* LOGIN */}
+
+          <div className="mt-6 text-center text-sm text-[#777777]">
             Already have an account?{" "}
+
             <button
               type="button"
-              onClick={() => router.push("/login")}
-              className="font-bold text-slate-900 hover:underline"
+              onClick={() =>
+                router.push("/login")
+              }
+              className="font-black text-[#111111] hover:underline"
             >
               Login
             </button>
           </div>
+
         </div>
       </div>
     </main>
