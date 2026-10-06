@@ -17,7 +17,7 @@ import {
 
 import { auth, db } from "@/lib/firebase";
 
-type CoinType = 550 | 1040 | 3250;
+type CoinType = 130 | 260 | 300 | 430 | 550 | 1040 | 3250;
 type PlayerCategory = 8 | 16;
 
 type Tournament = {
@@ -38,6 +38,22 @@ const coinOptions: {
   coins: CoinType;
   cost: string;
 }[] = [
+  {
+    coins: 130,
+    cost: "₹110",
+  },
+  {
+    coins: 260,
+    cost: "₹220",
+  },
+  {
+    coins: 300,
+    cost: "₹240",
+  },
+  {
+    coins: 430,
+    cost: "₹350",
+  },
   {
     coins: 550,
     cost: "₹440",
