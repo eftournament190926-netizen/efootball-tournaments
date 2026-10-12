@@ -22,6 +22,7 @@ import FixtureTab8Players from "./FixtureTab8Players";
 type Tournament = {
   id: string;
   coins: number;
+  cashPrize?: number;
   entryFee: number;
   registeredPlayers: number;
   maxPlayers: number;
@@ -443,6 +444,8 @@ export default function TournamentDetailsPage() {
             coins: Number(
               data.coins || 0
             ),
+
+            cashPrize: Number(data.cashPrize || 0),
 
             entryFee: Number(
               data.entryFee || 0

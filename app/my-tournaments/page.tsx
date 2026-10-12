@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -11,19 +12,17 @@ import {
   where,
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-
 import { auth, db } from "@/lib/firebase";
 
-/* =========================================================
-   TYPES
-========================================================= */
+type TournamentType = "coin" | "money";
 
 type Registration = {
   id: string;
-  userId: string;
+  userId?: string;
+  uid?: string;
   tournamentId: string;
   tournamentPoints?: number;
-  category?: string;
+  category?: string | number;
   date?: string;
   time?: string;
   entryFee?: number;
@@ -32,57 +31,50 @@ type Registration = {
   createdAt?: {
     seconds?: number;
   };
+  tournamentType: TournamentType;
+};
+
+type SavedScore = {
+  p1Score: number;
+  p2Score: number;
+};
+
+type SavedMatchPlayers = {
+  player1Id: string;
+  player2Id: string;
 };
 
 type Tournament = {
   id: string;
+  tournamentType: TournamentType;
   points: number;
   image: string;
   description: string;
-
   date: string;
   time: string;
-
   category: string;
-
   players: number;
   entryFee: number;
   rewardCoins: number;
-
+  cashPrize: number;
   status: string;
-
   registeredPlayers: number;
   maxPlayers: number;
-
-  scores?: Record<
-    string,
-    {
-      p1Score: number;
-      p2Score: number;
-    }
-  >;
-
-  matchPlayers?: Record<
-    string,
-    {
-      player1Id: string;
-      player2Id: string;
-    }
-  >;
+  scores: Record<string, SavedScore>;
+  matchPlayers: Record<string, SavedMatchPlayers>;
+  createdAtSeconds: number;
 };
-
-/* =========================================================
-   HELPERS
-========================================================= */
 
 function getTournamentImage(points: number) {
   return `/images/${points}.png`;
 }
 
+function getMoneyTournamentImage(bannerType: number) {
+  return `/images/money/${bannerType}.png`;
+}
+
 function formatDate(dateString: string) {
-  if (!dateString) {
-    return "";
-  }
+  if (!dateString) return "";
 
   const date = new Date(`${dateString}T00:00:00`);
 
@@ -98,110 +90,87 @@ function formatDate(dateString: string) {
 }
 
 function formatTime(time: string) {
-  if (!time) {
-    return "";
-  }
+  if (!time) return "";
 
-  return time;
-}
+  const value = time.trim();
 
-function getCountdown(date: string, time: string) {
-  if (!date || !time) {
-    return "";
-  }
+  const match = value.match(/^(\d{1,2}):(\d{2})$/);
 
-  const tournamentDate = new Date(
-    `${date}T${convertTimeTo24Hour(time)}:00`,
-  );
+  if (!match) return value;
 
-  if (Number.isNaN(tournamentDate.getTime())) {
-    return "";
-  }
+  const hour = Number(match[1]);
+  const minute = match[2];
 
-  const now = new Date();
+  const period = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 || 12;
 
-  const difference =
-    tournamentDate.getTime() - now.getTime();
-
-  if (difference <= 0) {
-    return "Started";
-  }
-
-  const totalMinutes = Math.floor(
-    difference / (1000 * 60),
-  );
-
-  const days = Math.floor(totalMinutes / 1440);
-
-  if (days === 0) {
-    const hours = Math.floor(totalMinutes / 60);
-
-    if (hours > 0) {
-      return `${hours} Hours`;
-    }
-
-    return `${Math.max(totalMinutes, 1)} Min`;
-  }
-
-  if (days === 1) {
-    return "Tomorrow";
-  }
-
-  return `${days} Days`;
+  return `${displayHour}:${minute} ${period}`;
 }
 
 function convertTimeTo24Hour(time: string) {
   const value = time.trim();
 
   const match = value.match(
-    /^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i,
+    /^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i
   );
 
-  if (!match) {
-    return value;
-  }
+  if (!match) return value;
 
   let hour = Number(match[1]);
-
   const minute = match[2] || "00";
-
   const period = match[3].toUpperCase();
 
-  if (period === "PM" && hour !== 12) {
-    hour += 12;
-  }
-
-  if (period === "AM" && hour === 12) {
-    hour = 0;
-  }
+  if (period === "PM" && hour !== 12) hour += 12;
+  if (period === "AM" && hour === 12) hour = 0;
 
   return `${String(hour).padStart(2, "0")}:${minute}`;
 }
 
+function getCountdown(date: string, time: string) {
+  if (!date || !time) return "";
+
+  const tournamentDate = new Date(
+    `${date}T${convertTimeTo24Hour(time)}:00+05:30`
+  );
+
+  if (Number.isNaN(tournamentDate.getTime())) {
+    return "";
+  }
+
+  const difference = tournamentDate.getTime() - Date.now();
+
+  if (difference <= 0) return "Started";
+
+  const totalMinutes = Math.floor(difference / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+
+  if (days === 0) {
+    const hours = Math.floor(totalMinutes / 60);
+
+    if (hours > 0) return `${hours} Hours`;
+
+    return `${Math.max(totalMinutes, 1)} Min`;
+  }
+
+  if (days === 1) return "Tomorrow";
+
+  return `${days} Days`;
+}
+
 function isTournamentPlayed(
   tournament: Tournament,
-  userId: string,
+  userId: string
 ) {
-  if (!tournament.matchPlayers) {
-    return false;
-  }
+  const { scores, matchPlayers } = tournament;
 
-  if (!tournament.scores) {
-    return false;
-  }
-
-  for (const matchId of Object.keys(
-    tournament.matchPlayers,
-  )) {
-    const match =
-      tournament.matchPlayers[matchId];
+  for (const matchId of Object.keys(matchPlayers || {})) {
+    const match = matchPlayers[matchId];
 
     const score =
-      tournament.scores[matchId];
+      scores[matchId] ||
+      scores[`match${matchId}`];
 
-    if (!match || !score) {
-      continue;
-    }
+    if (!match || !score) continue;
 
     if (
       match.player1Id === userId ||
@@ -213,10 +182,6 @@ function isTournamentPlayed(
 
   return false;
 }
-
-/* =========================================================
-   BOTTOM NAVIGATION
-========================================================= */
 
 function BottomNavigation() {
   const router = useRouter();
@@ -240,9 +205,7 @@ function BottomNavigation() {
             </>
           }
           active
-          onClick={() =>
-            router.push("/my-tournaments")
-          }
+          onClick={() => router.push("/my-tournaments")}
         />
 
         <BottomNavItem
@@ -254,11 +217,7 @@ function BottomNavigation() {
               League
             </>
           }
-          onClick={() =>
-            router.push(
-              "/division"
-            )
-          }
+          onClick={() => router.push("/division")}
         />
 
         <BottomNavItem
@@ -270,17 +229,13 @@ function BottomNavigation() {
               Board
             </>
           }
-          onClick={() =>
-            router.push("/leaderboard")
-          }
+          onClick={() => router.push("/leaderboard")}
         />
 
         <BottomNavItem
           icon="👤"
           label="Profile"
-          onClick={() =>
-            router.push("/profile")
-          }
+          onClick={() => router.push("/profile")}
         />
       </div>
     </nav>
@@ -303,16 +258,12 @@ function BottomNavItem({
       type="button"
       onClick={onClick}
       className={`flex h-full flex-col items-center justify-center gap-[3px] transition ${
-        active
-          ? "text-[#FFD600]"
-          : "text-[#777777]"
+        active ? "text-[#FFD600]" : "text-[#777777]"
       }`}
     >
       <span
-        className={`flex h-[23px] items-center justify-center text-[19px] leading-none transition ${
-          active
-            ? ""
-            : "grayscale opacity-35"
+        className={`flex h-[23px] items-center justify-center text-[19px] leading-none ${
+          active ? "" : "grayscale opacity-35"
         }`}
       >
         {icon}
@@ -331,10 +282,6 @@ function BottomNavItem({
   );
 }
 
-/* =========================================================
-   TOURNAMENT CARD
-========================================================= */
-
 function TournamentCard({
   tournament,
   userId,
@@ -344,58 +291,42 @@ function TournamentCard({
   userId: string;
   onOpen: () => void;
 }) {
+  const isMoney = tournament.tournamentType === "money";
+
   const registered = Number(
-    tournament.registeredPlayers || 0,
+    tournament.registeredPlayers || 0
   );
 
   const maxPlayers = Number(
-    tournament.maxPlayers ||
-      tournament.players ||
-      0,
+    tournament.maxPlayers || tournament.players || 0
   );
 
   const percentage =
     maxPlayers > 0
-      ? Math.min(
-          (registered / maxPlayers) * 100,
-          100,
-        )
+      ? Math.min((registered / maxPlayers) * 100, 100)
       : 0;
 
-  const played = isTournamentPlayed(
-    tournament,
-    userId,
-  );
-
-  const image =
-    tournament.image ||
-    getTournamentImage(tournament.points);
+  const played = isTournamentPlayed(tournament, userId);
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="w-[340px] shrink-0 overflow-hidden rounded-[20px] border border-[#d9d9d9] bg-white text-left shadow-[0_4px_14px_rgba(0,0,0,0.08)] transition active:scale-[0.99]"
+      className="w-full max-w-[400px] overflow-hidden rounded-[20px] border border-[#d9d9d9] bg-white text-left shadow-[0_4px_14px_rgba(0,0,0,0.08)] transition active:scale-[0.99]"
     >
-      {/* IMAGE */}
-
       <div className="relative w-full overflow-hidden bg-white">
         <img
-          src={image}
-          alt={`Tournament ${tournament.points}`}
+          src={tournament.image}
+          alt={isMoney ? "Money Tournament" : "Coin Tournament"}
           className="block h-auto w-full"
         />
 
         <div className="absolute left-3 top-3 rounded-full bg-[#111111] px-3 py-[6px] text-[9px] font-black uppercase tracking-[0.08em] text-[#FFD600]">
-          eFootball
+          {isMoney ? "Cash Tournament" : "eFootball"}
         </div>
       </div>
 
-      {/* DETAILS */}
-
       <div className="px-5 pb-5 pt-4">
-        {/* DATE / COUNTDOWN */}
-
         <div className="grid grid-cols-[1fr_auto] items-start gap-3">
           <div>
             <p className="text-[19px] font-black leading-none text-[#111111]">
@@ -413,15 +344,10 @@ function TournamentCard({
             </p>
 
             <p className="mt-1 whitespace-nowrap text-[15px] font-black text-[#111111]">
-              {getCountdown(
-                tournament.date,
-                tournament.time,
-              )}
+              {getCountdown(tournament.date, tournament.time)}
             </p>
           </div>
         </div>
-
-        {/* INFO */}
 
         <div className="mt-5 grid grid-cols-2 overflow-hidden rounded-[14px] border border-[#eeeeee] bg-[#fafafa]">
           <div className="p-3">
@@ -430,22 +356,24 @@ function TournamentCard({
             </p>
 
             <p className="mt-1 text-[17px] font-black text-[#111111]">
-              ₹{tournament.entryFee || 0}
+              {isMoney
+                ? `${tournament.entryFee} Points`
+                : `₹${tournament.entryFee}`}
             </p>
           </div>
 
           <div className="border-l border-[#e1e1e1] p-3">
             <p className="text-[10px] font-bold text-[#8b939a]">
-              Prize Pool
+              {isMoney ? "Cash Prize" : "Prize Pool"}
             </p>
 
             <p className="mt-1 text-[17px] font-black text-[#111111]">
-              {tournament.rewardCoins || 0} coin
+              {isMoney
+                ? `₹${tournament.cashPrize}`
+                : `${tournament.rewardCoins} coin`}
             </p>
           </div>
         </div>
-
-        {/* PLAYERS */}
 
         <div className="mt-5">
           <div className="mb-2 flex items-center justify-between">
@@ -461,14 +389,10 @@ function TournamentCard({
           <div className="h-[7px] w-full overflow-hidden rounded-full bg-[#e3e3e3]">
             <div
               className="h-full rounded-full bg-[#FFD600]"
-              style={{
-                width: `${percentage}%`,
-              }}
+              style={{ width: `${percentage}%` }}
             />
           </div>
         </div>
-
-        {/* STATUS */}
 
         {played && (
           <div className="mt-4">
@@ -482,388 +406,308 @@ function TournamentCard({
   );
 }
 
-/* =========================================================
-   MAIN PAGE
-========================================================= */
-
 export default function MyTournamentsPage() {
   const router = useRouter();
 
-  const [userId, setUserId] =
-    useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
-  const [authLoading, setAuthLoading] =
-    useState(true);
-
-  const [registrations, setRegistrations] =
+  const [coinRegistrations, setCoinRegistrations] =
     useState<Registration[]>([]);
+
+  const [moneyRegistrations, setMoneyRegistrations] =
+    useState<Registration[]>([]);
+
+  const [coinLoaded, setCoinLoaded] = useState(false);
+  const [moneyLoaded, setMoneyLoaded] = useState(false);
 
   const [tournaments, setTournaments] =
     useState<Tournament[]>([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loadingDetails, setLoadingDetails] = useState(true);
 
   const [activeTab, setActiveTab] =
-    useState<"upcoming" | "played">(
-      "upcoming",
-    );
-
-  /* =======================================================
-     AUTH
-  ======================================================= */
+    useState<"upcoming" | "played">("upcoming");
 
   useEffect(() => {
-    const unsubscribe =
-      onAuthStateChanged(
-        auth,
-        (user) => {
-          if (!user) {
-            setUserId(null);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        setUserId(null);
+        setAuthLoading(false);
+        router.push("/login?redirect=/my-tournaments");
+        return;
+      }
 
-            setAuthLoading(false);
-
-            router.push(
-              "/login?redirect=/my-tournaments",
-            );
-
-            return;
-          }
-
-          setUserId(user.uid);
-
-          setAuthLoading(false);
-        },
-      );
+      setUserId(user.uid);
+      setAuthLoading(false);
+    });
 
     return () => unsubscribe();
   }, [router]);
 
-  /* =======================================================
-     LOAD USER REGISTRATIONS
-  ======================================================= */
-
   useEffect(() => {
-    if (!userId) {
-      return;
-    }
+    if (!userId) return;
 
-    setLoading(true);
+    setCoinLoaded(false);
+    setMoneyLoaded(false);
 
-    const registrationsQuery =
-      query(
-        collection(
-          db,
-          "tournamentRegistrations",
-        ),
-        where(
-          "userId",
-          "==",
-          userId,
-        ),
-      );
+    const coinQuery = query(
+      collection(db, "tournamentRegistrations"),
+      where("userId", "==", userId)
+    );
 
-    const unsubscribe =
-      onSnapshot(
-        registrationsQuery,
-        (snapshot) => {
-          const list: Registration[] =
-            snapshot.docs.map(
-              (item) => ({
-                id: item.id,
+    const moneyQuery = query(
+      collection(db, "moneyTournamentRegistrations"),
+      where("userId", "==", userId)
+    );
 
-                ...(item.data() as Omit<
-                  Registration,
-                  "id"
-                >),
-              }),
-            );
+    const unsubscribeCoin = onSnapshot(
+      coinQuery,
+      (snapshot) => {
+        
+const registrations: Registration[] = snapshot.docs
+  .map((item): Registration => ({
+    ...(item.data() as Omit<Registration, "id" | "tournamentType">),
+    id: item.id,
+    tournamentType: "coin",
+  }))
+  .filter((item) => item.status === "confirmed");
 
-          const confirmed =
-            list.filter(
-              (item) =>
-                item.status ===
-                "confirmed",
-            );
+setCoinRegistrations(registrations);
+setCoinLoaded(true);
 
-          confirmed.sort(
-            (a, b) => {
-              const aTime =
-                a.createdAt
-                  ?.seconds || 0;
+      },
+      (error) => {
+        console.error("Coin registration error:", error);
+        setCoinRegistrations([]);
+        setCoinLoaded(true);
+      }
+    );
 
-              const bTime =
-                b.createdAt
-                  ?.seconds || 0;
+    const unsubscribeMoney = onSnapshot(
+      moneyQuery,
+      (snapshot) => {
+        
+const registrations: Registration[] = snapshot.docs
+  .map((item): Registration => ({
+    ...(item.data() as Omit<Registration, "id" | "tournamentType">),
+    id: item.id,
+    tournamentType: "money",
+  }))
+  .filter((item) => item.status === "confirmed");
 
-              return (
-                bTime - aTime
-              );
-            },
-          );
+setMoneyRegistrations(registrations);
+setMoneyLoaded(true);
 
-          setRegistrations(
-            confirmed,
-          );
-        },
-        (error) => {
-          console.error(
-            "Failed to load registrations:",
-            error,
-          );
+      },
+      (error) => {
+        console.error("Money registration error:", error);
+        setMoneyRegistrations([]);
+        setMoneyLoaded(true);
+      }
+    );
 
-          setRegistrations([]);
-
-          setLoading(false);
-        },
-      );
-
-    return () => unsubscribe();
+    return () => {
+      unsubscribeCoin();
+      unsubscribeMoney();
+    };
   }, [userId]);
 
-  /* =======================================================
-     LOAD TOURNAMENT DETAILS
-  ======================================================= */
+  const allRegistrations = useMemo(
+    () => [...coinRegistrations, ...moneyRegistrations],
+    [coinRegistrations, moneyRegistrations]
+  );
 
   useEffect(() => {
-    if (registrations.length === 0) {
+    if (!coinLoaded || !moneyLoaded) return;
+
+    if (allRegistrations.length === 0) {
       setTournaments([]);
-
-      setLoading(false);
-
+      setLoadingDetails(false);
       return;
     }
 
     let cancelled = false;
+    const unsubscribers: Array<() => void> = [];
 
-    async function loadTournaments() {
-      const result: Tournament[] =
-        [];
+    setLoadingDetails(true);
 
-      for (const registration of registrations) {
-        try {
-          /*
-           * Tournament document is normally stored
-           * using tournamentId.
-           */
+    const tournamentMap = new Map<string, Tournament>();
+    const loadedKeys = new Set<string>();
 
-          const tournamentRef =
-            doc(
-              db,
-              "tournaments",
-              registration.tournamentId,
-            );
+    const uniqueRegistrations = Array.from(
+      new Map(
+        allRegistrations.map((registration) => [
+          `${registration.tournamentType}_${registration.tournamentId}`,
+          registration,
+        ])
+      ).values()
+    );
 
-          let tournamentSnap =
-            await getDoc(
-              tournamentRef,
-            );
+    const expectedCount = uniqueRegistrations.length;
 
-          /*
-           * Fallback:
-           * Some older registrations use
-           * tournamentPoints instead.
-           */
+    function publish() {
+      if (cancelled) return;
 
-          if (
-            !tournamentSnap.exists() &&
-            registration.tournamentPoints
-          ) {
-            tournamentSnap =
-              await getDoc(
-                doc(
-                  db,
-                  "tournaments",
-                  String(
-                    registration.tournamentPoints,
-                  ),
-                ),
-              );
-          }
+      setTournaments(
+        Array.from(tournamentMap.values()).sort(
+          (a, b) => b.createdAtSeconds - a.createdAtSeconds
+        )
+      );
 
-          if (
-            !tournamentSnap.exists()
-          ) {
-            continue;
-          }
-
-          const data =
-            tournamentSnap.data();
-
-          const points =
-            Number(
-              data.points ??
-                registration.tournamentPoints ??
-                0,
-            );
-
-          const category =
-            String(
-              registration.category ??
-                data.category ??
-                "sixteenPlayers",
-            );
-
-          const maxPlayers =
-            Number(
-              data.maxPlayers ??
-                data.players ??
-                (
-                  category ===
-                  "sixteenPlayers"
-                    ? 16
-                    : 8
-                ),
-            );
-
-          const tournament: Tournament =
-            {
-              id:
-                tournamentSnap.id,
-
-              points,
-
-              image:
-                data.image ||
-                getTournamentImage(
-                  points,
-                ),
-
-              description:
-                data.description ||
-                "",
-
-              date:
-                registration.date ||
-                data.date ||
-                "",
-
-              time:
-                registration.time ||
-                data.time ||
-                "",
-
-              category,
-
-              players:
-                maxPlayers,
-
-              entryFee:
-                Number(
-                  registration.entryFee ??
-                    data.entryFee ??
-                    0,
-                ),
-
-              rewardCoins:
-                Number(
-                  registration.rewardCoins ??
-                    data.rewardCoins ??
-                    data.coins ??
-                    0,
-                ),
-
-              status:
-                String(
-                  data.status ||
-                    "upcoming",
-                ),
-
-              registeredPlayers:
-                Number(
-                  data.registeredPlayers ||
-                    0,
-                ),
-
-              maxPlayers,
-
-              scores:
-                data.scores || {},
-
-              matchPlayers:
-                data.matchPlayers ||
-                {},
-            };
-
-          result.push(
-            tournament,
-          );
-        } catch (error) {
-          console.error(
-            "Failed to load tournament:",
-            registration.tournamentId,
-            error,
-          );
-        }
-      }
-
-      if (!cancelled) {
-        setTournaments(result);
-
-        setLoading(false);
+      if (loadedKeys.size >= expectedCount) {
+        setLoadingDetails(false);
       }
     }
 
-    loadTournaments();
+    for (const registration of uniqueRegistrations) {
+      const collectionName =
+        registration.tournamentType === "money"
+          ? "moneyTournaments"
+          : "tournaments";
+
+      const key =
+        `${registration.tournamentType}_${registration.tournamentId}`;
+
+      const tournamentRef = doc(
+        db,
+        collectionName,
+        registration.tournamentId
+      );
+
+      const unsubscribe = onSnapshot(
+        tournamentRef,
+        (snapshot) => {
+          loadedKeys.add(key);
+
+          if (!snapshot.exists()) {
+            tournamentMap.delete(key);
+            publish();
+            return;
+          }
+
+          const data = snapshot.data();
+          const isMoney =
+            registration.tournamentType === "money";
+
+          const points = Number(
+            data.points ??
+            registration.tournamentPoints ??
+            0
+          );
+
+          const bannerType = Number(
+            data.bannerType ?? data.entryFee ?? 10
+          );
+
+          const category = String(
+            registration.category ??
+            data.category ??
+            (Number(data.maxPlayers) === 8
+              ? "eightPlayers"
+              : "sixteenPlayers")
+          );
+
+          const maxPlayers = Number(
+            data.maxPlayers ??
+            data.players ??
+            (category === "eightPlayers" || category === "8"
+              ? 8
+              : 16)
+          );
+
+          const tournament: Tournament = {
+            id: snapshot.id,
+            tournamentType: registration.tournamentType,
+            points,
+            image: isMoney
+              ? getMoneyTournamentImage(bannerType)
+              : data.image || getTournamentImage(points),
+            description: String(data.description || ""),
+            date: String(
+              registration.date || data.date || ""
+            ),
+            time: String(
+              registration.time || data.time || ""
+            ),
+            category,
+            players: maxPlayers,
+            entryFee: Number(
+              registration.entryFee ?? data.entryFee ?? 0
+            ),
+            rewardCoins: isMoney
+              ? 0
+              : Number(
+                  registration.rewardCoins ??
+                  data.rewardCoins ??
+                  data.coins ??
+                  0
+                ),
+            cashPrize: isMoney
+              ? Number(data.cashPrize ?? 0)
+              : 0,
+            status: String(data.status || "upcoming"),
+            registeredPlayers: Number(
+              data.registeredPlayers ?? 0
+            ),
+            maxPlayers,
+            scores: data.scores || {},
+            matchPlayers: data.matchPlayers || {},
+            createdAtSeconds:
+              registration.createdAt?.seconds || 0,
+          };
+
+          tournamentMap.set(key, tournament);
+          publish();
+        },
+        (error) => {
+          console.error(
+            `Tournament load failed: ${key}`,
+            error
+          );
+
+          loadedKeys.add(key);
+          tournamentMap.delete(key);
+          publish();
+        }
+      );
+
+      unsubscribers.push(unsubscribe);
+    }
 
     return () => {
       cancelled = true;
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [registrations]);
+  }, [allRegistrations, coinLoaded, moneyLoaded]);
 
-  /* =======================================================
-     UPCOMING / PLAYED
-  ======================================================= */
+  const upcomingTournaments = useMemo(() => {
+    if (!userId) return [];
 
-  const upcomingTournaments =
-    useMemo(() => {
-      if (!userId) {
-        return [];
-      }
+    return tournaments.filter(
+      (tournament) =>
+        !isTournamentPlayed(tournament, userId)
+    );
+  }, [tournaments, userId]);
 
-      return tournaments.filter(
-        (tournament) =>
-          !isTournamentPlayed(
-            tournament,
-            userId,
-          ),
-      );
-    }, [
-      tournaments,
-      userId,
-    ]);
+  const playedTournaments = useMemo(() => {
+    if (!userId) return [];
 
-  const playedTournaments =
-    useMemo(() => {
-      if (!userId) {
-        return [];
-      }
-
-      return tournaments.filter(
-        (tournament) =>
-          isTournamentPlayed(
-            tournament,
-            userId,
-          ),
-      );
-    }, [
-      tournaments,
-      userId,
-    ]);
+    return tournaments.filter(
+      (tournament) =>
+        isTournamentPlayed(tournament, userId)
+    );
+  }, [tournaments, userId]);
 
   const displayedTournaments =
     activeTab === "upcoming"
       ? upcomingTournaments
       : playedTournaments;
 
-  /* =======================================================
-     LOADING
-  ======================================================= */
-
   if (
     authLoading ||
-    (loading &&
-      tournaments.length === 0)
+    (!coinLoaded && !moneyLoaded) ||
+    (loadingDetails && tournaments.length === 0)
   ) {
     return (
       <main className="min-h-screen bg-[#eeeeee]">
@@ -880,41 +724,22 @@ export default function MyTournamentsPage() {
     );
   }
 
-  /* =======================================================
-     PAGE
-  ======================================================= */
-
   return (
     <main className="min-h-screen bg-[#eeeeee]">
       <div className="mx-auto min-h-screen max-w-md bg-[#eeeeee] pb-[82px]">
-
-        {/* ===============================================
-            HEADER
-        =============================================== */}
-
         <header className="flex h-[112px] items-center bg-[#FFD600] px-7">
-          <div className="flex items-center gap-3">
-            <img
-              src="/logo.png"
-              alt="eFOOTBALL TOURNAMENTS"
-              className="h-[48px] w-[185px] object-contain object-left"
-            />
-          </div>
+          <img
+            src="/logo.png"
+            alt="eFOOTBALL TOURNAMENTS"
+            className="h-[48px] w-[185px] object-contain object-left"
+          />
         </header>
-
-        {/* ===============================================
-            TABS
-        =============================================== */}
 
         <div className="border-b border-[#dedede] bg-white">
           <div className="grid grid-cols-2">
             <button
               type="button"
-              onClick={() =>
-                setActiveTab(
-                  "upcoming",
-                )
-              }
+              onClick={() => setActiveTab("upcoming")}
               className={`relative h-[62px] text-[18px] font-black ${
                 activeTab === "upcoming"
                   ? "text-[#111111]"
@@ -923,19 +748,14 @@ export default function MyTournamentsPage() {
             >
               Upcoming
 
-              {activeTab ===
-                "upcoming" && (
+              {activeTab === "upcoming" && (
                 <span className="absolute bottom-0 left-[36px] right-[36px] h-[4px] rounded-full bg-[#FFD600]" />
               )}
             </button>
 
             <button
               type="button"
-              onClick={() =>
-                setActiveTab(
-                  "played",
-                )
-              }
+              onClick={() => setActiveTab("played")}
               className={`relative h-[62px] text-[18px] font-black ${
                 activeTab === "played"
                   ? "text-[#111111]"
@@ -944,84 +764,57 @@ export default function MyTournamentsPage() {
             >
               You Played
 
-              {activeTab ===
-                "played" && (
+              {activeTab === "played" && (
                 <span className="absolute bottom-0 left-[36px] right-[36px] h-[4px] rounded-full bg-[#FFD600]" />
               )}
             </button>
           </div>
         </div>
 
-        {/* ===============================================
-            CONTENT
-        =============================================== */}
-
         <section className="min-h-[calc(100vh-256px)] bg-[#eeeeee] px-3 pb-8 pt-8">
-          {displayedTournaments.length >
-          0 ? (
-            <div className="flex gap-5 overflow-x-auto pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {displayedTournaments.map(
-                (tournament) => (
-                  <TournamentCard
-                    key={`${tournament.id}_${tournament.date}_${tournament.time}_${tournament.category}`}
-                    tournament={
-                      tournament
-                    }
-                    userId={
-                      userId || ""
-                    }
-                    onOpen={() => {
-                      const params =
-                        new URLSearchParams({
-                          category:
-                            tournament.category,
-                          date:
-                            tournament.date,
-                          time:
-                            tournament.time,
-                          tournamentId:
-                            tournament.id,
-                        });
+          {displayedTournaments.length > 0 ? (
+            <div className="flex flex-col items-center gap-5 pb-5">
+              {displayedTournaments.map((tournament) => (
+                <TournamentCard
+                  key={`${tournament.tournamentType}_${tournament.id}`}
+                  tournament={tournament}
+                  userId={userId || ""}
+                  
 
-                      router.push(
-                        `/tournament/${tournament.id}?from=my-tournaments`,
-                      );
-                    }}
-                  />
-                ),
-              )}
+onOpen={() => {
+  if (tournament.tournamentType === "money") {
+    router.push(`/money/tournament/${tournament.id}`);
+  } else {
+    router.push(`/tournament/${tournament.id}`);
+  }
+}}
+
+
+                />
+              ))}
             </div>
           ) : (
             <div className="flex min-h-[350px] items-center justify-center px-5">
               <div className="w-full rounded-[22px] border border-[#dedede] bg-white px-6 py-10 text-center shadow-[0_4px_14px_rgba(0,0,0,0.05)]">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#FFD600] text-[30px]">
-                  {activeTab ===
-                  "upcoming"
-                    ? "🎮"
-                    : "🏆"}
+                  {activeTab === "upcoming" ? "🎮" : "🏆"}
                 </div>
 
                 <p className="mt-5 text-[17px] font-black text-[#111111]">
-                  {activeTab ===
-                  "upcoming"
+                  {activeTab === "upcoming"
                     ? "No upcoming tournaments"
                     : "No tournaments played yet"}
                 </p>
 
                 <p className="mx-auto mt-2 max-w-[260px] text-[12px] font-medium leading-5 text-[#8b8b8b]">
-                  {activeTab ===
-                  "upcoming"
-                    ? "Your confirmed tournaments will appear here."
-                    : "Tournaments you actually played will appear here."}
+                  {activeTab === "upcoming"
+                    ? "Your confirmed coin and money tournaments will appear here."
+                    : "Coin and money tournaments you played will appear here."}
                 </p>
               </div>
             </div>
           )}
         </section>
-
-        {/* ===============================================
-            BOTTOM NAV
-        =============================================== */}
 
         <BottomNavigation />
       </div>

@@ -335,13 +335,41 @@ export default function AdminPage() {
               </h1>
             </div>
 
-            <button
-              type="button"
-              onClick={() => router.push("/")}
-              className="rounded-[10px] border border-[#e0e5eb] bg-white px-3 py-2 text-[9px] font-extrabold text-[#566173]"
-            >
-              HOME
-            </button>
+            <div className="flex items-center gap-2">
+
+              
+<button
+  type="button"
+  onClick={() => router.push("/admin/money-tournaments")}
+  className="rounded-[10px] bg-[#16a34a] px-3 py-2 text-[8px] font-black text-white transition hover:bg-[#15803d]"
+>
+  💵 MONEY TOURNAMENT
+</button>
+
+
+  <button
+    type="button"
+    onClick={() =>
+      router.push(
+        "/admin/money-requests"
+      )
+    }
+    className="rounded-[10px] bg-[#FFD600] px-3 py-2 text-[8px] font-black text-[#111111]"
+  >
+    💰 MONEY REQUESTS
+  </button>
+
+  <button
+    type="button"
+    onClick={() =>
+      router.push("/")
+    }
+    className="rounded-[10px] border border-[#e0e5eb] bg-white px-3 py-2 text-[9px] font-extrabold text-[#566173]"
+  >
+    HOME
+  </button>
+
+</div>
           </div>
         </header>
 
