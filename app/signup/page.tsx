@@ -72,7 +72,7 @@ export default function SignupPage() {
   const router = useRouter();
 
   const [username, setUsername] = useState("");
-  const [konamiId, setKonamiId] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -95,7 +95,7 @@ export default function SignupPage() {
     setSuccess("");
 
     const cleanUsername = username.trim();
-    const cleanKonamiId = konamiId.trim();
+    const cleanPhoneNumber = phoneNumber.trim();
     const cleanEmail = email.trim();
 
     if (!cleanUsername) {
@@ -103,10 +103,10 @@ export default function SignupPage() {
       return;
     }
 
-    if (!cleanKonamiId) {
-      setError("Please enter your Konami ID.");
-      return;
-    }
+    if (!/^[6-9]\d{9}$/.test(cleanPhoneNumber)) {
+  setError("Please enter a valid 10-digit Indian phone number.");
+  return;
+}
 
     if (!cleanEmail) {
       setError("Please enter your email.");
@@ -136,7 +136,7 @@ export default function SignupPage() {
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         email: cleanEmail,
-        konamiId: cleanKonamiId,
+        phoneNumber: cleanPhoneNumber,
         username: cleanUsername,
 
         // Local avatar path
@@ -368,30 +368,41 @@ export default function SignupPage() {
             </div>
 
             {/* =========================================
-                KONAMI ID
-            ========================================= */}
+    PHONE NUMBER
+========================================= */}
 
-            <div>
-              <label
-                htmlFor="konamiId"
-                className="mb-2 block text-sm font-semibold"
-              >
-                Konami ID
-              </label>
+<div>
+  <label
+    htmlFor="phoneNumber"
+    className="mb-2 block text-sm font-semibold"
+  >
+    Phone Number
+  </label>
 
-              <input
-                id="konamiId"
-                type="text"
-                value={konamiId}
-                onChange={(event) =>
-                  setKonamiId(event.target.value)
-                }
-                placeholder="Enter your User ID"
-                autoComplete="off"
-                className="h-12 w-full rounded-xl border border-[#dddddd] bg-[#f7f7f7] px-4 text-sm outline-none transition focus:border-[#FFD600] focus:bg-white"
-                required
-              />
-            </div>
+  <input
+    id="phoneNumber"
+    type="tel"
+    inputMode="numeric"
+    value={phoneNumber}
+    onChange={(event) => {
+      const value = event.target.value
+        .replace(/\D/g, "")
+        .slice(0, 10);
+
+      setPhoneNumber(value);
+    }}
+    placeholder="Enter your 10-digit phone number"
+    autoComplete="tel-national"
+    maxLength={10}
+    pattern="[6-9][0-9]{9}"
+    className="h-12 w-full rounded-xl border border-[#dddddd] bg-[#f7f7f7] px-4 text-sm outline-none transition focus:border-[#FFD600] focus:bg-white"
+    required
+  />
+
+  <p className="mt-2 text-xs text-[#999999]">
+    Enter your 10-digit mobile number
+  </p>
+</div>
 
             {/* =========================================
                 EMAIL

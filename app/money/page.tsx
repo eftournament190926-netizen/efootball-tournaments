@@ -827,7 +827,7 @@ export default function MoneyPage() {
   const [pointsBalance, setPointsBalance] = useState(0);
   const [winningsBalance, setWinningsBalance] = useState(0);
   const [showAddPoints, setShowAddPoints] = useState(false);
-  const [pointAmount, setPointAmount] = useState(100);
+  const [pointAmount, setPointAmount] = useState(50);
 
   const [addingPoints, setAddingPoints] = useState(false);
   const [addPointsError, setAddPointsError] = useState("");
@@ -1116,12 +1116,12 @@ const [convertError, setConvertError] = useState("");
     const handleAddPointsRequest = async () => {
   setAddPointsError("");
 
-  if (pointAmount < 100) {
-    setAddPointsError(
-      "Minimum point purchase is ₹100."
-    );
-    return;
-  }
+  if (pointAmount < 50 || !Number.isSafeInteger(pointAmount)) {
+  setAddPointsError(
+    "Minimum point purchase is ₹50. Enter a valid whole amount."
+  );
+  return;
+}
 
   const user = auth.currentUser;
 
@@ -1175,7 +1175,7 @@ const [convertError, setConvertError] = useState("");
     );
 
     setShowAddPoints(false);
-    setPointAmount(100);
+    setPointAmount(50);
   } catch (error) {
     console.error(
       "Error creating point request:",
@@ -1724,7 +1724,7 @@ async function handleConvertWinnings() {
         </p>
 
         <p className="mt-1 text-[9px] font-bold text-[#777777]">
-          Minimum purchase ₹100
+          Minimum purchase ₹50
         </p>
       </div>
 
@@ -1734,7 +1734,7 @@ async function handleConvertWinnings() {
       </p>
 
       <div className="mt-2 grid grid-cols-4 gap-2">
-        {[100, 200, 500, 1000].map((amount) => (
+        {[50, 100, 200, 500, 1000].map((amount) => (
           <button
             key={amount}
             type="button"
@@ -1761,16 +1761,15 @@ async function handleConvertWinnings() {
         </span>
 
         <input
-          type="number"
-          min="100"
-          value={pointAmount}
-          onChange={(event) =>
-            setPointAmount(
-              Number(event.target.value)
-            )
-          }
-          className="h-[50px] w-full bg-transparent px-2 text-[16px] font-black text-[#111111] outline-none"
-        />
+  type="number"
+  min="50"
+  step="1"
+  value={pointAmount}
+  onChange={(event) =>
+    setPointAmount(Number(event.target.value))
+  }
+  className="h-[50px] w-full bg-transparent px-2 text-[16px] font-black text-[#111111] outline-none"
+/>
       </div>
 
       {/* POINT PREVIEW */}
@@ -1795,7 +1794,8 @@ async function handleConvertWinnings() {
   type="button"
   onClick={handleAddPointsRequest}
   disabled={
-    pointAmount < 100 ||
+    pointAmount < 50 ||
+    !Number.isSafeInteger(pointAmount) ||
     addingPoints
   }
   className="mt-4 w-full rounded-[12px] bg-[#FFD600] py-[14px] text-[11px] font-black text-[#111111] transition active:scale-[0.98] disabled:bg-[#dddddd] disabled:text-[#999999]"

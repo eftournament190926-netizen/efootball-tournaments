@@ -589,575 +589,229 @@ export default function FixtureTab8Players({
   /* SAVE MATCH                                                               */
   /* ------------------------------------------------------------------------ */
 
-  async function saveMatch(
-    matchId: number
-  ) {
-    if (
-      !editPlayer1 ||
-      !editPlayer2
-    ) {
-      alert(
-        "Please select both players."
-      );
+  async function saveMatch(matchId: number) {
+    if (!editPlayer1 || !editPlayer2) {
+      alert("Please select both players.");
+      return;
+    }
+    if (editPlayer1 === editPlayer2) {
+      alert("Same player cannot be selected twice.");
+      return;
+    }
+    if (editP1Score.trim() === "" || editP2Score.trim() === "") {
+      alert("Please enter both scores.");
       return;
     }
 
-    if (
-      editPlayer1 ===
-      editPlayer2
-    ) {
-      alert(
-        "Same player cannot be selected twice."
-      );
+    const p1Score = Number(editP1Score);
+    const p2Score = Number(editP2Score);
+    if (!Number.isInteger(p1Score) || p1Score < 0 ||
+        !Number.isInteger(p2Score) || p2Score < 0) {
+      alert("Please enter valid scores.");
+      return;
+    }
+    if (p1Score === p2Score &&
+        editPenaltyWinner !== editPlayer1 &&
+        editPenaltyWinner !== editPlayer2) {
+      alert("Please select a valid penalty winner.");
       return;
     }
 
-    const p1Score =
-      Number(editP1Score);
+    type StatTotals = {
+      goals: number;
+      conceded: number;
+      wins: number;
+      losses: number;
+      matches: number;
+      tournamentPlayed: number;
+      tournamentWon: number;
+      tournamentRunner: number;
+    };
+    const zero = (): StatTotals => ({
+      goals: 0, conceded: 0, wins: 0, losses: 0,
+      matches: 0, tournamentPlayed: 0,
+      tournamentWon: 0, tournamentRunner: 0,
+    });
+    const statKeys: (keyof StatTotals)[] = [
+      "goals", "conceded", "wins", "losses", "matches",
+      "tournamentPlayed", "tournamentWon", "tournamentRunner",
+    ];
 
-    const p2Score =
-      Number(editP2Score);
-
-    if (
-      !Number.isInteger(
-        p1Score
-      ) ||
-      p1Score < 0 ||
-      !Number.isInteger(
-        p2Score
-      ) ||
-      p2Score < 0
-    ) {
-      alert(
-        "Please enter valid scores."
-      );
-      return;
-    }
-
-    if (
-      p1Score === p2Score &&
-      !editPenaltyWinner
-    ) {
-      alert(
-        "Draw match-il penalty winner select cheyyanam."
-      );
-      return;
-    }
-
-    if (
-      p1Score === p2Score &&
-      editPenaltyWinner !==
-        editPlayer1 &&
-      editPenaltyWinner !==
-        editPlayer2
-    ) {
-      alert(
-        "Penalty winner must be one of the two players."
-      );
-      return;
+    // Calculate the complete contribution of this tournament from saved matches.
+    // This allows both score edits and player swaps to be handled correctly.
+    function calculateStats(
+      allScores: Record<string, SavedScore>,
+      allPlayers: Record<string, SavedMatchPlayers>,
+      allPenalties: Record<string, string>
+    ): Record<string, StatTotals> {
+      const totals: Record<string, StatTotals> = {};
+      const ensure = (id: string) => (totals[id] ??= zero());
+      for (const [id, score] of Object.entries(allScores)) {
+        const pair = allPlayers[id];
+        if (!pair?.player1Id || !pair?.player2Id ||
+            pair.player1Id === pair.player2Id) continue;
+        if (!Number.isFinite(score?.p1Score) ||
+            !Number.isFinite(score?.p2Score)) continue;
+        const p1 = ensure(pair.player1Id);
+        const p2 = ensure(pair.player2Id);
+        p1.goals += score.p1Score;
+        p1.conceded += score.p2Score;
+        p2.goals += score.p2Score;
+        p2.conceded += score.p1Score;
+        p1.matches += 1;
+        p2.matches += 1;
+        if (score.p1Score > score.p2Score) {
+          p1.wins += 1; p2.losses += 1;
+        } else if (score.p2Score > score.p1Score) {
+          p2.wins += 1; p1.losses += 1;
+        } else if (allPenalties[id] === pair.player1Id) {
+          p1.wins += 1; p2.losses += 1;
+        } else if (allPenalties[id] === pair.player2Id) {
+          p2.wins += 1; p1.losses += 1;
+        }
+      }
+      for (const stats of Object.values(totals)) {
+        stats.tournamentPlayed = stats.matches > 0 ? 1 : 0;
+      }
+      const final = allScores["7"];
+      const finalists = allPlayers["7"];
+      if (final && finalists?.player1Id && finalists?.player2Id &&
+          finalists.player1Id !== finalists.player2Id) {
+        let winner = "";
+        let runner = "";
+        if (final.p1Score > final.p2Score ||
+            (final.p1Score === final.p2Score &&
+             allPenalties["7"] === finalists.player1Id)) {
+          winner = finalists.player1Id;
+          runner = finalists.player2Id;
+        } else if (final.p2Score > final.p1Score ||
+                   (final.p1Score === final.p2Score &&
+                    allPenalties["7"] === finalists.player2Id)) {
+          winner = finalists.player2Id;
+          runner = finalists.player1Id;
+        }
+        if (winner && runner) {
+          ensure(winner).tournamentWon += 1;
+          ensure(runner).tournamentRunner += 1;
+        }
+      }
+      return totals;
     }
 
     try {
       setSavingMatch(matchId);
-
-      const tournamentRef =
-        doc(
-          db,
-          "moneyTournaments",
-          tournament.id
-        );
-
-      const result =
-        await runTransaction(
-          db,
-          async (transaction) => {
-            const tournamentSnap =
-              await transaction.get(
-                tournamentRef
-              );
-
-            if (
-              !tournamentSnap.exists()
-            ) {
-              throw new Error(
-                "Tournament not found."
-              );
-            }
-
-            const tournamentData =
-              tournamentSnap.data();
-
-            const oldScores =
-              (tournamentData.scores ||
-                {}) as Record<
-                string,
-                SavedScore
-              >;
-
-            const oldMatchPlayers =
-              (tournamentData.matchPlayers ||
-                {}) as Record<
-                string,
-                SavedMatchPlayers
-              >;
-
-            const oldPenaltyWinners =
-              (tournamentData.penaltyWinners ||
-                {}) as Record<
-                string,
-                string
-              >;
-
-            /*
-             * Tracks players who already
-             * participated in this tournament.
-             */
-            const playedUsersMap =
-              (tournamentData.playedUsersMap ||
-                {}) as Record<
-                string,
-                boolean
-              >;
-
-            const newScores: Record<
-              string,
-              SavedScore
-            > = {
-              ...oldScores,
-
-              [String(matchId)]: {
-                p1Score,
-                p2Score,
-              },
-            };
-
-            const newMatchPlayers: Record<
-              string,
-              SavedMatchPlayers
-            > = {
-              ...oldMatchPlayers,
-
-              [String(matchId)]: {
-                player1Id:
-                  editPlayer1,
-                player2Id:
-                  editPlayer2,
-              },
-            };
-
-            const newPenaltyWinners: Record<
-              string,
-              string
-            > = {
-              ...oldPenaltyWinners,
-            };
-
-            if (
-              p1Score ===
-              p2Score
-            ) {
-              newPenaltyWinners[
-                String(matchId)
-              ] =
-                editPenaltyWinner;
-            } else {
-              delete newPenaltyWinners[
-                String(matchId)
-              ];
-            }
-
-            /*
-             * First completed match
-             * participation tracking.
-             */
-            const newPlayedUsersMap =
-              {
-                ...playedUsersMap,
-              };
-
-            let p1TournamentPlayedDelta =
-              0;
-
-            let p2TournamentPlayedDelta =
-              0;
-
-            if (
-              !newPlayedUsersMap[
-                editPlayer1
-              ]
-            ) {
-              newPlayedUsersMap[
-                editPlayer1
-              ] = true;
-
-              p1TournamentPlayedDelta =
-                1;
-            }
-
-            if (
-              !newPlayedUsersMap[
-                editPlayer2
-              ]
-            ) {
-              newPlayedUsersMap[
-                editPlayer2
-              ] = true;
-
-              p2TournamentPlayedDelta =
-                1;
-            }
-
-            /* ------------------------------------------------------------ */
-            /* FINAL WINNER / RUNNER                                         */
-            /* ------------------------------------------------------------ */
-
-            let winnerId = "";
-            let runnerId = "";
-
-            /*
-             * 8-player tournament:
-             * Match 7 = Final
-             */
-            if (
-              String(matchId) ===
-              "7"
-            ) {
-              if (
-                p1Score >
-                p2Score
-              ) {
-                winnerId =
-                  editPlayer1;
-
-                runnerId =
-                  editPlayer2;
-              } else if (
-                p2Score >
-                p1Score
-              ) {
-                winnerId =
-                  editPlayer2;
-
-                runnerId =
-                  editPlayer1;
-              } else if (
-                editPenaltyWinner
-              ) {
-                winnerId =
-                  editPenaltyWinner;
-
-                runnerId =
-                  editPenaltyWinner ===
-                  editPlayer1
-                    ? editPlayer2
-                    : editPlayer1;
-              }
-            }
-
-            /* ------------------------------------------------------------ */
-            /* READ USERS                                                     */
-            /* ------------------------------------------------------------ */
-
-            const affectedUserIds =
-              new Set<string>([
-                editPlayer1,
-                editPlayer2,
-              ]);
-
-            const userSnapshots: {
-              userId: string;
-              userRef: ReturnType<
-                typeof doc
-              >;
-              userSnap: Awaited<
-                ReturnType<
-                  typeof getDoc
-                >
-              >;
-            }[] = [];
-
-            for (
-              const userId of
-                affectedUserIds
-            ) {
-              const userRef =
-                doc(
-                  db,
-                  "users",
-                  userId
-                );
-
-              const userSnap =
-                await transaction.get(
-                  userRef
-                );
-
-              userSnapshots.push({
-                userId,
-                userRef,
-                userSnap,
-              });
-            }
-
-            /* ------------------------------------------------------------ */
-            /* TOURNAMENT UPDATE                                             */
-            /* ------------------------------------------------------------ */
-
-            const tournamentUpdateData: Record<
-              string,
-              unknown
-            > = {
-              [`scores.${matchId}`]: {
-                p1Score,
-                p2Score,
-              },
-
-              [`matchPlayers.${matchId}`]: {
-                player1Id:
-                  editPlayer1,
-                player2Id:
-                  editPlayer2,
-              },
-
-              playedUsersMap:
-                newPlayedUsersMap,
-
-              updatedAt:
-                serverTimestamp(),
-            };
-
-            if (
-              p1Score ===
-              p2Score
-            ) {
-              tournamentUpdateData[
-                `penaltyWinners.${matchId}`
-              ] =
-                editPenaltyWinner;
-            } else {
-              tournamentUpdateData[
-                `penaltyWinners.${matchId}`
-              ] =
-                deleteField();
-            }
-
-            if (
-              winnerId &&
-              runnerId
-            ) {
-              tournamentUpdateData[
-                "winnerId"
-              ] = winnerId;
-
-              tournamentUpdateData[
-                "runnerId"
-              ] = runnerId;
-            }
-
-            transaction.update(
-              tournamentRef,
-              tournamentUpdateData
-            );
-
-            /* ------------------------------------------------------------ */
-            /* USER STATS                                                     */
-            /* ------------------------------------------------------------ */
-
-            for (
-              const user of
-                userSnapshots
-            ) {
-              const userId =
-                user.userId;
-
-              const isP1 =
-                userId ===
-                editPlayer1;
-
-              const pScore = isP1
-                ? p1Score
-                : p2Score;
-
-              const oScore = isP1
-                ? p2Score
-                : p1Score;
-
-              let isWin =
-                pScore >
-                oScore;
-
-              let isLoss =
-                oScore >
-                pScore;
-
-              if (
-                pScore ===
-                oScore
-              ) {
-                isWin =
-                  editPenaltyWinner ===
-                  userId;
-
-                isLoss =
-                  editPenaltyWinner !==
-                    userId &&
-                  editPenaltyWinner !==
-                    "";
-              }
-
-              const playedDelta =
-                isP1
-                  ? p1TournamentPlayedDelta
-                  : p2TournamentPlayedDelta;
-
-              const isWinnerOfTournament =
-                userId ===
-                winnerId;
-
-              const isRunnerOfTournament =
-                userId ===
-                runnerId;
-
-              const currentData = user.userSnap.exists()
-  ? (user.userSnap.data() as {
-      tournamentStats?: {
-        goals?: number;
-        conceded?: number;
-        wins?: number;
-        losses?: number;
-        matches?: number;
-        tournamentPlayed?: number;
-        tournamentWon?: number;
-        tournamentRunner?: number;
-      };
-    })
-  : {};
-
-const currentStats =
-  currentData.tournamentStats || {};
-
-              const nextStats = {
-                ...currentStats,
-
-                goals:
-                  Number(
-                    currentStats.goals ||
-                      0
-                  ) + pScore,
-
-                conceded:
-                  Number(
-                    currentStats.conceded ||
-                      0
-                  ) + oScore,
-
-                wins:
-                  Number(
-                    currentStats.wins ||
-                      0
-                  ) +
-                  (isWin ? 1 : 0),
-
-                losses:
-                  Number(
-                    currentStats.losses ||
-                      0
-                  ) +
-                  (isLoss ? 1 : 0),
-
-                matches:
-                  Number(
-                    currentStats.matches ||
-                      0
-                  ) + 1,
-
-                tournamentPlayed:
-                  Number(
-                    currentStats.tournamentPlayed ||
-                      0
-                  ) +
-                  playedDelta,
-
-                tournamentWon:
-                  Number(
-                    currentStats.tournamentWon ||
-                      0
-                  ) +
-                  (isWinnerOfTournament
-                    ? 1
-                    : 0),
-
-                tournamentRunner:
-                  Number(
-                    currentStats.tournamentRunner ||
-                      0
-                  ) +
-                  (isRunnerOfTournament
-                    ? 1
-                    : 0),
-              };
-
-              transaction.set(
-                user.userRef,
-                {
-                  tournamentStats:
-                    nextStats,
-                },
-                {
-                  merge: true,
-                }
-              );
-            }
-
-            return {
-              newScores,
-              newMatchPlayers,
-              newPenaltyWinners,
-            };
+      const tournamentRef = doc(db, "moneyTournaments", tournament.id);
+      const result = await runTransaction(db, async (transaction) => {
+        const tournamentSnap = await transaction.get(tournamentRef);
+        if (!tournamentSnap.exists()) throw new Error("Tournament not found.");
+        const tournamentData = tournamentSnap.data();
+        const oldScores = (tournamentData.scores || {}) as Record<string, SavedScore>;
+        const oldMatchPlayers = (tournamentData.matchPlayers || {}) as Record<string, SavedMatchPlayers>;
+        const oldPenaltyWinners = (tournamentData.penaltyWinners || {}) as Record<string, string>;
+
+        const newScores = {
+          ...oldScores,
+          [String(matchId)]: { p1Score, p2Score },
+        };
+        const newMatchPlayers = {
+          ...oldMatchPlayers,
+          [String(matchId)]: {
+            player1Id: editPlayer1,
+            player2Id: editPlayer2,
+          },
+        };
+        const newPenaltyWinners = { ...oldPenaltyWinners };
+        if (p1Score === p2Score) {
+          newPenaltyWinners[String(matchId)] = editPenaltyWinner;
+        } else {
+          delete newPenaltyWinners[String(matchId)];
+        }
+
+        const oldStats = calculateStats(oldScores, oldMatchPlayers, oldPenaltyWinners);
+        const newStats = calculateStats(newScores, newMatchPlayers, newPenaltyWinners);
+        const affectedIds = Array.from(new Set([
+          ...Object.keys(oldStats), ...Object.keys(newStats),
+        ]));
+
+        // Firestore requires every transaction read to precede any write.
+        const userDocs = [];
+        for (const userId of affectedIds) {
+          const userRef = doc(db, "users", userId);
+          const userSnap = await transaction.get(userRef);
+          userDocs.push({ userId, userRef, userSnap });
+        }
+
+        const playedUsersMap: Record<string, boolean> = {
+          ...((tournamentData.playedUsersMap || {}) as Record<string, boolean>),
+        };
+        for (const [userId, stats] of Object.entries(newStats)) {
+          if (stats.matches > 0) playedUsersMap[userId] = true;
+        }
+        for (const userId of Object.keys(oldStats)) {
+          if (!newStats[userId]?.matches) delete playedUsersMap[userId];
+        }
+
+        const tournamentUpdate: Record<string, unknown> = {
+          scores: newScores,
+          matchPlayers: newMatchPlayers,
+          penaltyWinners: newPenaltyWinners,
+          playedUsersMap,
+          updatedAt: serverTimestamp(),
+        };
+        const finalScore = newScores["7"];
+        const finalPair = newMatchPlayers["7"];
+        if (finalScore && finalPair?.player1Id && finalPair?.player2Id) {
+          let winner = "";
+          let runner = "";
+          if (finalScore.p1Score > finalScore.p2Score ||
+              (finalScore.p1Score === finalScore.p2Score &&
+               newPenaltyWinners["7"] === finalPair.player1Id)) {
+            winner = finalPair.player1Id;
+            runner = finalPair.player2Id;
+          } else if (finalScore.p2Score > finalScore.p1Score ||
+                     (finalScore.p1Score === finalScore.p2Score &&
+                      newPenaltyWinners["7"] === finalPair.player2Id)) {
+            winner = finalPair.player2Id;
+            runner = finalPair.player1Id;
           }
-        );
+          tournamentUpdate.winnerId = winner || deleteField();
+          tournamentUpdate.runnerId = runner || deleteField();
+        }
+        transaction.update(tournamentRef, tournamentUpdate);
 
-      /* ------------------------------------------------------------------ */
-      /* LOCAL STATE                                                        */
-      /* ------------------------------------------------------------------ */
+        for (const { userId, userRef, userSnap } of userDocs) {
+          const previous = oldStats[userId] || zero();
+          const updated = newStats[userId] || zero();
+          const existing = userSnap.exists()
+            ? (userSnap.data().tournamentStats || {}) as Partial<StatTotals>
+            : {};
+          const next: StatTotals = zero();
+          for (const key of statKeys) {
+            next[key] = Math.max(0,
+              Number(existing[key] || 0) + updated[key] - previous[key]
+            );
+          }
+          transaction.set(userRef, {
+            tournamentStats: { ...existing, ...next },
+          }, { merge: true });
+        }
 
-      setScores(
-        result.newScores
-      );
-
-      setMatchPlayers(
-        result.newMatchPlayers
-      );
-
-      setPenaltyWinners(
-        result.newPenaltyWinners
-      );
-
-      onTournamentUpdated?.({
-        scores:
-          result.newScores,
-
-        matchPlayers:
-          result.newMatchPlayers,
-
-        penaltyWinners:
-          result.newPenaltyWinners,
+        return { newScores, newMatchPlayers, newPenaltyWinners };
       });
 
+      setScores(result.newScores);
+      setMatchPlayers(result.newMatchPlayers);
+      setPenaltyWinners(result.newPenaltyWinners);
+      onTournamentUpdated?.({
+        scores: result.newScores,
+        matchPlayers: result.newMatchPlayers,
+        penaltyWinners: result.newPenaltyWinners,
+      });
       cancelEditing();
-
-      alert(
-        "Match score and player stats updated successfully."
-      );
+      alert("Match score and player stats updated successfully.");
     } catch (error) {
-      console.error(
-        "Failed to save match and update user stats:",
-        error
-      );
-
-      alert(
-        "Failed to save match and update user stats."
-      );
+      console.error("Failed to save match and update user stats:", error);
+      alert("Failed to save match and update user stats.");
     } finally {
       setSavingMatch(null);
     }

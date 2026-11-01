@@ -29,6 +29,11 @@ type Registration = {
   username?: string;
   eFootballUsername?: string;
   profilePhoto?: string;
+  phoneNumber?: string;
+  phone?: string;
+  mobileNumber?: string;
+  mobile?: string;
+  konamiId?: string;
   status?: string;
   createdAt?: { seconds?: number };
 };
@@ -37,6 +42,8 @@ type Player = {
   id: string;
   username: string;
   profilePhoto: string;
+  phoneNumber: string;
+  konamiId: string;
 };
 
 type Props = {
@@ -106,43 +113,69 @@ export default function PlayersTab({
 
         const loadedPlayers: Player[] = [];
 
-        for (const registration of registrations) {
-          const uid = registration.userId || registration.uid;
+for (const registration of registrations) {
+  const uid = registration.userId || registration.uid;
 
-          let username =
-            registration.username ||
-            registration.eFootballUsername ||
-            "";
+  let username =
+    registration.username ||
+    registration.eFootballUsername ||
+    "";
 
-          let profilePhoto = registration.profilePhoto || "";
+  let profilePhoto = registration.profilePhoto || "";
 
-          if (uid && (!username || !profilePhoto)) {
-            try {
-              const userSnap = await getDoc(doc(db, "users", uid));
+  let phoneNumber =
+    registration.phoneNumber ||
+    registration.phone ||
+    registration.mobileNumber ||
+    registration.mobile ||
+    "";
 
-              if (userSnap.exists()) {
-                const userData = userSnap.data();
+  let konamiId = registration.konamiId || "";
 
-                username =
-                  username ||
-                  userData.username ||
-                  userData.eFootballUsername ||
-                  "Player";
+  if (uid) {
+    try {
+      const userSnap = await getDoc(doc(db, "users", uid));
 
-                profilePhoto =
-                  profilePhoto || userData.profilePhoto || "";
-              }
-            } catch (lookupError) {
-              console.error("User lookup failed:", lookupError);
-            }
-          }
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
 
-          loadedPlayers.push({
-            id: uid || registration.id,
-            username: username || "Player",
-            profilePhoto,
-          });
-        }
+        username =
+          username ||
+          userData.username ||
+          userData.eFootballUsername ||
+          "Player";
+
+        profilePhoto =
+          profilePhoto ||
+          userData.profilePhoto ||
+          "";
+
+        phoneNumber =
+          phoneNumber ||
+          userData.phoneNumber ||
+          userData.phone ||
+          userData.mobileNumber ||
+          userData.mobile ||
+          "";
+
+        konamiId =
+          konamiId ||
+          userData.konamiId ||
+          "";
+      }
+    } catch (lookupError) {
+      console.error("User lookup failed:", lookupError);
+    }
+  }
+
+  loadedPlayers.push({
+    id: uid || registration.id,
+    username: username || "Player",
+    profilePhoto,
+    phoneNumber: String(phoneNumber).trim(),
+    konamiId: String(konamiId).trim(),
+  });
+}
 
         if (!cancelled) {
           setPlayers(loadedPlayers.slice(0, tournament.maxPlayers));
@@ -233,7 +266,7 @@ export default function PlayersTab({
       )}
 
       {is16Players ? (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-5">
           <AdminPlayerPool
             title="Pool A"
             players={poolA}
@@ -336,33 +369,103 @@ function PlayerRow({
   number: number;
   player: Player | null;
 }) {
-  return (
-    <div className="flex h-9 min-w-0 items-center gap-1.5">
-      <span className="w-4 shrink-0 text-center text-[11px] font-black">
-        {number}
-      </span>
+  const phone = player?.phoneNumber || "";
 
-      <div className="h-7 w-7 shrink-0 overflow-hidden rounded-full border border-gray-200 bg-gray-100">
-        {player?.profilePhoto ? (
-          <img
-            src={player.profilePhoto}
-            alt=""
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-xs">
-            {player ? "👤" : ""}
-          </div>
-        )}
+  const cleanPhone = phone.replace(/\D/g, "");
+
+  const whatsappNumber = cleanPhone.startsWith("91")
+    ? cleanPhone
+    : cleanPhone.length === 10
+    ? `91${cleanPhone}`
+    : cleanPhone;
+
+  return (
+    <div className="min-w-0 rounded-xl border border-gray-100 bg-[#f7f7f7] p-2">
+
+      <div className="flex min-w-0 items-center gap-2">
+
+        <span className="w-4 shrink-0 text-center text-[11px] font-black">
+          {number}
+        </span>
+
+        <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full border border-gray-200 bg-gray-100">
+          {player?.profilePhoto ? (
+            <img
+              src={player.profilePhoto}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-xs">
+              {player ? "👤" : ""}
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p
+            className={`truncate text-[11px] font-black ${
+              player ? "text-black" : "text-gray-300"
+            }`}
+          >
+            {player?.username || "Empty Slot"}
+          </p>
+
+          {player?.konamiId && (
+            <p className="truncate text-[9px] text-gray-500">
+              ID: {player.konamiId}
+            </p>
+          )}
+        </div>
       </div>
 
-      <span
-        className={`min-w-0 flex-1 truncate text-[11px] font-black ${
-          player ? "text-black" : "text-gray-300"
-        }`}
-      >
-        {player?.username || "Empty Slot"}
-      </span>
+      {player && (
+        <div className="mt-2 border-t border-gray-200 pt-2">
+
+          <p className="break-all text-[11px] font-bold text-gray-700">
+            📞 {phone || "Phone not available"}
+          </p>
+
+          {phone && (
+            <div className="mt-2 flex gap-1">
+
+              <a
+                href={`tel:${phone}`}
+                className="flex-1 rounded-md bg-black py-1.5 text-center text-[9px] font-black text-white"
+              >
+                CALL
+              </a>
+
+              {whatsappNumber && (
+                <a
+                  href={`https://wa.me/${whatsappNumber}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 rounded-md bg-green-600 py-1.5 text-center text-[9px] font-black text-white"
+                >
+                  WHATSAPP
+                </a>
+              )}
+
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(phone);
+                    alert("Phone number copied.");
+                  } catch {
+                    alert("Unable to copy phone number.");
+                  }
+                }}
+                className="rounded-md bg-yellow-400 px-2 py-1.5 text-[9px] font-black text-black"
+              >
+                COPY
+              </button>
+
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

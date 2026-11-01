@@ -318,7 +318,7 @@ export default function FixtureTab({
 
   const tournamentRef = doc(
     db,
-    "tournaments",
+    "moneyTournaments",
     tournament.id,
   );
 
@@ -806,6 +806,38 @@ const result = await runTransaction(
       const userId = user.userId;
       const isP1 = userId === editPlayer1;
 
+      // Pazhaya match score edukkunnu (Munpu save cheythathundel, illlel 0)
+      const oldMatchScore = oldScores[String(matchId)];
+      const oldMatchPlayer = oldMatchPlayers[String(matchId)];
+      
+      let oldPScore = 0;
+      let oldOScore = 0;
+      let oldIsWin = false;
+      let oldIsLoss = false;
+
+      if (oldMatchScore && oldMatchPlayer) {
+        const isOldP1 = oldMatchPlayer.player1Id === userId;
+        const isOldP2 = oldMatchPlayer.player2Id === userId;
+        if (isOldP1 || isOldP2) {
+          oldPScore = isOldP1 ? oldMatchScore.p1Score : oldMatchScore.p2Score;
+          oldOScore = isOldP1 ? oldMatchScore.p2Score : oldMatchScore.p1Score;
+
+          if (oldPScore > oldOScore) {
+            oldIsWin = true;
+          } else if (oldOScore > oldPScore) {
+            oldIsLoss = true;
+          } else {
+            const oldPenaltyWinner = oldPenaltyWinners[String(matchId)];
+            if (oldPenaltyWinner === userId) {
+              oldIsWin = true;
+            } else if (oldPenaltyWinner && oldPenaltyWinner !== userId) {
+              oldIsLoss = true;
+            }
+          }
+        }
+      }
+
+      // Puthiya score
       const pScore = isP1 ? p1Score : p2Score;
       const oScore = isP1 ? p2Score : p1Score;
 
@@ -817,6 +849,14 @@ const result = await runTransaction(
         isLoss = editPenaltyWinner !== userId && editPenaltyWinner !== "";
       }
 
+      // Diffs (Difference calculation for replace/update instead of adding up)
+      const goalDiff = pScore - oldPScore;
+      const concededDiff = oScore - oldOScore;
+      const winDiff = (isWin ? 1 : 0) - (oldIsWin ? 1 : 0);
+      const lossDiff = (isLoss ? 1 : 0) - (oldIsLoss ? 1 : 0);
+      // Munpulla match aayatukondu matches count +1 aayittundakum, so re-edit cheyyumpol matches count-il change varanda avashyamilla.
+      const matchDiff = (oldMatchScore && (oldMatchPlayer?.player1Id === userId || oldMatchPlayer?.player2Id === userId)) ? 0 : 1;
+
       const playedDelta = isP1 ? p1TournamentPlayedDelta : p2TournamentPlayedDelta;
       const isWinnerOfTournament = userId === winnerId;
       const isRunnerOfTournament = userId === runnerId;
@@ -826,24 +866,26 @@ const result = await runTransaction(
 
       const nextStats = {
         ...currentStats,
-        goals: Number(currentStats.goals || 0) + pScore,
-        conceded: Number(currentStats.conceded || 0) + oScore,
-        wins: Number(currentStats.wins || 0) + (isWin ? 1 : 0),
-        losses: Number(currentStats.losses || 0) + (isLoss ? 1 : 0),
-        matches: Number(currentStats.matches || 0) + 1,
+        goals: Number(currentStats.goals || 0) + goalDiff,
+        conceded: Number(currentStats.conceded || 0) + concededDiff,
+        wins: Number(currentStats.wins || 0) + winDiff,
+        losses: Number(currentStats.losses || 0) + lossDiff,
+        matches: Number(currentStats.matches || 0) + matchDiff,
         tournamentPlayed: Number(currentStats.tournamentPlayed || 0) + playedDelta,
         tournamentWon: Number(currentStats.tournamentWon || 0) + (isWinnerOfTournament ? 1 : 0),
-        tournamentRunner: Number(currentStats.tournamentRunner || 0) + (isRunnerOfTournament ? 1 : 0),
+        tournamentRunner:
+          Number(currentStats.tournamentRunner || 0) +
+          (isRunnerOfTournament ? 1 : 0),
       };
 
       transaction.set(user.userRef, { tournamentStats: nextStats }, { merge: true });
     }
 
     return {
-      newScores,
-      newMatchPlayers,
-      newPenaltyWinners,
-    };
+  newScores,
+  newMatchPlayers,
+  newPenaltyWinners,
+};
   }
 ); 
 

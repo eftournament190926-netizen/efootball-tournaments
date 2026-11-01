@@ -1051,51 +1051,83 @@ function TabButton({
    RULES
 ================================================= */
 
+
 function RulesTab() {
+  const rules = [
+    {
+      en: "The match will start at the exact scheduled time.",
+      ml: "നിശ്ചയിച്ച സമയത്ത് തന്നെ മത്സരം ആരംഭിക്കും.",
+    },
+    {
+      en: "The room code will be shared 15 minutes before the scheduled match time.",
+      ml: "മത്സരം ആരംഭിക്കുന്നതിന് 15 മിനിറ്റ് മുമ്പ് റൂം കോഡ് നൽകും.",
+    },
+    {
+      en: "Players must use the room code and join the match room at least 5 minutes before the scheduled start time.",
+      ml: "മത്സരം ആരംഭിക്കുന്നതിന് കുറഞ്ഞത് 5 മിനിറ്റ് മുമ്പ് റൂം കോഡ് ഉപയോഗിച്ച് റൂമിൽ പ്രവേശിക്കണം.",
+    },
+    {
+      en: "A maximum waiting period of 5 minutes will be allowed after the scheduled start time. For example, if the match is at 8:00 AM, players must join by 8:05 AM. Players who fail to join within this period will be removed from the tournament.",
+      ml: "നിശ്ചയിച്ച സമയത്തിന് ശേഷം പരമാവധി 5 മിനിറ്റ് മാത്രമേ കാത്തിരിക്കൂ. ഉദാഹരണത്തിന്, മത്സരം രാവിലെ 8:00-ന് ആണെങ്കിൽ 8:05-നകം റൂമിൽ പ്രവേശിക്കണം. അതിനുള്ളിൽ പ്രവേശിക്കാത്ത കളിക്കാരെ ടൂർണമെന്റിൽ നിന്ന് പുറത്താക്കും.",
+    },
+    {
+      en: "Match Duration: 7 minutes.",
+      ml: "മത്സര ദൈർഘ്യം: 7 മിനിറ്റ്.",
+    },
+    {
+      en: "Match Conditions: Random.",
+      ml: "മാച്ച് കണ്ടീഷൻ: Random.",
+    },
+    {
+      en: "Extra Time: ON.",
+      ml: "എക്സ്ട്രാ ടൈം: ON.",
+    },
+    {
+      en: "Injuries: ON.",
+      ml: "പരിക്കുകൾ (Injuries): ON.",
+    },
+  ];
+
   return (
     <div className="px-5 pb-8 pt-6">
-
       <h2 className="text-[21px] font-black text-[#111111]">
         Tournament Rules
       </h2>
 
-      <div className="mt-3">
+      <p className="mt-1 text-xs font-medium text-[#777777]">
+        ടൂർണമെന്റ് നിയമങ്ങൾ | English & Malayalam
+      </p>
 
-        <Rule
-          number="1"
-          text="Players must join the tournament before the registration closes."
-        />
+      <div className="mt-4">
+        {rules.map((rule, index) => (
+          <div
+            key={index}
+            className={`flex gap-3 py-4 ${
+              index !== rules.length - 1
+                ? "border-b border-[#eeeeee]"
+                : ""
+            }`}
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FFD600] text-sm font-black text-[#111111]">
+              {index + 1}
+            </div>
 
-        <Rule
-          number="2"
-          text="Use your registered eFootball username while playing the match."
-        />
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-bold leading-relaxed text-[#222222]">
+                {rule.en}
+              </p>
 
-        <Rule
-          number="3"
-          text="The match room code will be provided after the tournament starts."
-        />
-
-        <Rule
-          number="4"
-          text="Players must enter the match room on time."
-        />
-
-        <Rule
-          number="5"
-          text="If a player does not join the match within the given time, the opponent may receive a walkover."
-        />
-
-        <Rule
-          number="6"
-          text="Any unfair play or cheating can result in disqualification."
-          last
-        />
-
+              <p className="mt-2 text-[13px] font-medium leading-relaxed text-[#666666]">
+                {rule.ml}
+              </p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
+
 
 /* =================================================
    RULE
