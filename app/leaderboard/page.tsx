@@ -7,7 +7,8 @@ import {
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
-import { db } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth, db } from "@/lib/firebase";
 
 /* =================================================
    TYPES
@@ -83,6 +84,17 @@ export default function LeaderboardPage() {
 
   const [error, setError] =
     useState("");
+
+  const [currentUserId, setCurrentUserId] =
+  useState<string | null>(null);
+
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, (user) => {
+    setCurrentUserId(user?.uid || null);
+  });
+
+  return () => unsubscribe();
+}, []);
 
   /* -----------------------------------------------
      LOAD LEADERBOARD
@@ -418,9 +430,32 @@ export default function LeaderboardPage() {
                 </p>
               </div>
 
-              <div className="rounded-full bg-[#FFD600] px-3 py-[6px] text-[9px] font-black text-[#111111]">
-                {rankedPlayers.length} Players
-              </div>
+              <div className="flex flex-col items-end gap-2">
+
+  <button
+    type="button"
+    disabled={
+      !currentUserId ||
+      !rankedPlayers.some(
+        (player) => player.id === currentUserId
+      )
+    }
+    onClick={() => {
+      const myRow = document.getElementById(
+        `leaderboard-player-${currentUserId}`
+      );
+
+      myRow?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }}
+    className="rounded-full bg-[#111111] px-3 py-2 text-[10px] font-black text-[#FFD600] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+  >
+    ★ My Ranking
+  </button>
+
+</div>
             </div>
 
             {/* TABLE HEADER */}
@@ -520,10 +555,11 @@ export default function LeaderboardPage() {
               rankedPlayers.map(
                 (player, index) => (
                   <LeaderboardRow
-                    key={player.id}
-                    player={player}
-                    rank={index + 1}
-                  />
+  key={player.id}
+  player={player}
+  rank={index + 1}
+  isCurrentUser={player.id === currentUserId}
+/>
                 )
               )
             )}
@@ -555,9 +591,11 @@ export default function LeaderboardPage() {
 function LeaderboardRow({
   player,
   rank,
+  isCurrentUser,
 }: {
   player: LeaderboardPlayer;
   rank: number;
+  isCurrentUser: boolean;
 }) {
   const router = useRouter();
 
@@ -570,12 +608,15 @@ function LeaderboardRow({
 
   return (
     <div
-      className={`grid grid-cols-[28px_minmax(120px,1fr)_32px_28px_28px_52px_35px_42px] items-center border-t border-[#eeeeee] px-2 py-3 text-[11px] ${
-        rank <= 3
-          ? "bg-[#fffdf2]"
-          : "bg-white"
-      }`}
-    >
+  id={`leaderboard-player-${player.id}`}
+  className={`grid grid-cols-[28px_minmax(120px,1fr)_32px_28px_28px_52px_35px_42px] items-center border-t border-[#eeeeee] px-2 py-3 text-[11px] transition ${
+    isCurrentUser
+      ? "bg-[#fff2a8] ring-2 ring-inset ring-[#FFD600]"
+      : rank <= 3
+      ? "bg-[#fffdf2]"
+      : "bg-white"
+  }`}
+>
 
       {/* =========================================
           RANK

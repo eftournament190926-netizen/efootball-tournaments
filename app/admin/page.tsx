@@ -360,6 +360,14 @@ export default function AdminPage() {
   </button>
 
   <button
+  type="button"
+  onClick={() => router.push("/admin/1v1-matches")}
+  className="rounded-[10px] bg-[#071426] px-3 py-2 text-[8px] font-black text-white transition hover:bg-[#0c2947]"
+>
+  ⚔️ 1V1 MATCH
+</button>
+
+  <button
     type="button"
     onClick={() =>
       router.push("/")
@@ -368,6 +376,7 @@ export default function AdminPage() {
   >
     HOME
   </button>
+  
 
 </div>
           </div>

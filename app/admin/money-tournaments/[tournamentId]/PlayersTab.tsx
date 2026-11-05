@@ -69,7 +69,8 @@ export default function PlayersTab({
   const [savingA, setSavingA] = useState(false);
   const [savingB, setSavingB] = useState(false);
 
-  const is16Players = tournament.maxPlayers === 16;
+  const is4Players = tournament.maxPlayers === 4;
+const is16Players = tournament.maxPlayers === 16;
 
   useEffect(() => {
     setRoomCodeA(
@@ -265,39 +266,55 @@ for (const registration of registrations) {
         </p>
       )}
 
-      {is16Players ? (
-        <div className="grid grid-cols-1 gap-5">
-          <AdminPlayerPool
-            title="Pool A"
-            players={poolA}
-            roomCode={roomCodeA}
-            startNumber={1}
-            saving={savingA}
-            onRoomCodeChange={setRoomCodeA}
-            onSave={() => saveRoomCode("roomCodeA", roomCodeA)}
-          />
+      {is4Players ? (
+  <div className="grid grid-cols-1 gap-5">
+    <AdminPlayerPool
+      title="4 Players"
+      players={players.slice(0, 4)}
+      roomCode={roomCodeA}
+      startNumber={1}
+      slotCount={4}
+      saving={savingA}
+      onRoomCodeChange={setRoomCodeA}
+      onSave={() => saveRoomCode("roomCode", roomCodeA)}
+    />
+  </div>
+) : is16Players ? (
+  <div className="grid grid-cols-1 gap-5">
+    <AdminPlayerPool
+      title="Pool A"
+      players={poolA}
+      roomCode={roomCodeA}
+      startNumber={1}
+      slotCount={8}
+      saving={savingA}
+      onRoomCodeChange={setRoomCodeA}
+      onSave={() => saveRoomCode("roomCodeA", roomCodeA)}
+    />
 
-          <AdminPlayerPool
-            title="Pool B"
-            players={poolB}
-            roomCode={roomCodeB}
-            startNumber={9}
-            saving={savingB}
-            onRoomCodeChange={setRoomCodeB}
-            onSave={() => saveRoomCode("roomCodeB", roomCodeB)}
-          />
-        </div>
-      ) : (
-        <AdminPlayerPool
-          title="Players"
-          players={poolA}
-          roomCode={roomCodeA}
-          startNumber={1}
-          saving={savingA}
-          onRoomCodeChange={setRoomCodeA}
-          onSave={() => saveRoomCode("roomCode", roomCodeA)}
-        />
-      )}
+    <AdminPlayerPool
+      title="Pool B"
+      players={poolB}
+      roomCode={roomCodeB}
+      startNumber={9}
+      slotCount={8}
+      saving={savingB}
+      onRoomCodeChange={setRoomCodeB}
+      onSave={() => saveRoomCode("roomCodeB", roomCodeB)}
+    />
+  </div>
+) : (
+  <AdminPlayerPool
+    title="Players"
+    players={poolA}
+    roomCode={roomCodeA}
+    startNumber={1}
+    slotCount={8}
+    saving={savingA}
+    onRoomCodeChange={setRoomCodeA}
+    onSave={() => saveRoomCode("roomCode", roomCodeA)}
+  />
+)}
     </div>
   );
 }
@@ -310,6 +327,7 @@ function AdminPlayerPool({
   saving,
   onRoomCodeChange,
   onSave,
+  slotCount,
 }: {
   title: string;
   players: Player[];
@@ -318,11 +336,12 @@ function AdminPlayerPool({
   saving: boolean;
   onRoomCodeChange: (value: string) => void;
   onSave: () => void;
+  slotCount: number;
 }) {
   const slots = Array.from(
-    { length: 8 },
-    (_, index) => players[index] || null
-  );
+  { length: slotCount },
+  (_, index) => players[index] || null
+);
 
   return (
     <div className="min-w-0">

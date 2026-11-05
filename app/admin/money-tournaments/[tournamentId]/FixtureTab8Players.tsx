@@ -31,6 +31,13 @@ type Tournament = {
   maxPlayers?: number;
   category?: string;
 
+  firstPrize?: number;
+  secondPrize?: number;
+  prizeCredited?: boolean;
+  prizeCreditedAt?: unknown;
+  winnerId?: string;
+  runnerId?: string;
+
   scores?: Record<
     string,
     {
@@ -132,6 +139,8 @@ export default function FixtureTab8Players({
 
   const [savingMatch, setSavingMatch] =
     useState<number | null>(null);
+  
+  const [savingFinal, setSavingFinal] = useState(false);
 
   /* ------------------------------------------------------------------------ */
   /* REALTIME TOURNAMENT LISTENER                                             */
@@ -705,6 +714,11 @@ export default function FixtureTab8Players({
         const tournamentSnap = await transaction.get(tournamentRef);
         if (!tournamentSnap.exists()) throw new Error("Tournament not found.");
         const tournamentData = tournamentSnap.data();
+        if (tournamentData.prizeCredited === true) {
+  throw new Error(
+    "Tournament prizes are already credited. Match editing is disabled."
+  );
+}
         const oldScores = (tournamentData.scores || {}) as Record<string, SavedScore>;
         const oldMatchPlayers = (tournamentData.matchPlayers || {}) as Record<string, SavedMatchPlayers>;
         const oldPenaltyWinners = (tournamentData.penaltyWinners || {}) as Record<string, string>;
@@ -816,6 +830,240 @@ export default function FixtureTab8Players({
       setSavingMatch(null);
     }
   }
+
+  /* ------------------------------------------------------------------------ */
+/* SAVE FINAL RESULT + CREDIT PRIZES                                        */
+/* ------------------------------------------------------------------------ */
+
+async function saveFinalResult() {
+  try {
+    setSavingFinal(true);
+
+    const tournamentRef = doc(
+      db,
+      "moneyTournaments",
+      tournament.id
+    );
+
+    const result = await runTransaction(
+      db,
+      async (transaction) => {
+        // 1. Get latest tournament data
+        const tournamentSnap =
+          await transaction.get(tournamentRef);
+
+        if (!tournamentSnap.exists()) {
+          throw new Error("Tournament not found.");
+        }
+
+        const tournamentData = tournamentSnap.data();
+
+        // 2. Prevent duplicate credit
+        if (tournamentData.prizeCredited === true) {
+          throw new Error(
+            "Prize has already been credited."
+          );
+        }
+
+        // 3. Read latest final match
+        const allScores = (
+          tournamentData.scores || {}
+        ) as Record<string, SavedScore>;
+
+        const allPlayers = (
+          tournamentData.matchPlayers || {}
+        ) as Record<string, SavedMatchPlayers>;
+
+        const allPenalties = (
+          tournamentData.penaltyWinners || {}
+        ) as Record<string, string>;
+
+        const finalScore = allScores["7"];
+        const finalPair = allPlayers["7"];
+
+        if (
+          !finalScore ||
+          !finalPair?.player1Id ||
+          !finalPair?.player2Id
+        ) {
+          throw new Error(
+            "Please complete the Grand Final match first."
+          );
+        }
+
+        if (
+          finalPair.player1Id === finalPair.player2Id
+        ) {
+          throw new Error(
+            "Both finalists must be different players."
+          );
+        }
+
+        // 4. Find winner and runner-up
+        let winnerId = "";
+        let runnerId = "";
+
+        if (
+          finalScore.p1Score > finalScore.p2Score
+        ) {
+          winnerId = finalPair.player1Id;
+          runnerId = finalPair.player2Id;
+        } else if (
+          finalScore.p2Score > finalScore.p1Score
+        ) {
+          winnerId = finalPair.player2Id;
+          runnerId = finalPair.player1Id;
+        } else {
+          const penaltyWinner = allPenalties["7"];
+
+          if (penaltyWinner === finalPair.player1Id) {
+            winnerId = finalPair.player1Id;
+            runnerId = finalPair.player2Id;
+          } else if (
+            penaltyWinner === finalPair.player2Id
+          ) {
+            winnerId = finalPair.player2Id;
+            runnerId = finalPair.player1Id;
+          } else {
+            throw new Error(
+              "Please select a valid penalty winner."
+            );
+          }
+        }
+
+        if (!winnerId || !runnerId) {
+          throw new Error(
+            "Unable to determine final result."
+          );
+        }
+
+        // 5. Get prize amounts
+        const firstPrize = Number(
+          tournamentData.firstPrize ?? 0
+        );
+
+        const secondPrize = Number(
+          tournamentData.secondPrize ?? 0
+        );
+
+        if (
+          !Number.isFinite(firstPrize) ||
+          firstPrize < 0 ||
+          !Number.isFinite(secondPrize) ||
+          secondPrize < 0
+        ) {
+          throw new Error(
+            "Invalid tournament prize amounts."
+          );
+        }
+
+        // 6. Read both users
+        const winnerRef = doc(
+          db,
+          "users",
+          winnerId
+        );
+
+        const runnerRef = doc(
+          db,
+          "users",
+          runnerId
+        );
+
+        const winnerSnap =
+          await transaction.get(winnerRef);
+
+        const runnerSnap =
+          await transaction.get(runnerRef);
+
+        if (!winnerSnap.exists()) {
+          throw new Error("Winner account not found.");
+        }
+
+        if (!runnerSnap.exists()) {
+          throw new Error("Runner-up account not found.");
+        }
+
+        // 7. Calculate winnings balances
+        const winnerBalance = Number(
+          winnerSnap.data().winningsBalance ?? 0
+        );
+
+        const runnerBalance = Number(
+          runnerSnap.data().winningsBalance ?? 0
+        );
+
+        if (
+          !Number.isFinite(winnerBalance) ||
+          !Number.isFinite(runnerBalance)
+        ) {
+          throw new Error(
+            "Invalid user winnings balance."
+          );
+        }
+
+        // 8. Credit winner
+        transaction.set(
+          winnerRef,
+          {
+            winningsBalance:
+              winnerBalance + firstPrize,
+          },
+          { merge: true }
+        );
+
+        // 9. Credit runner-up
+        transaction.set(
+          runnerRef,
+          {
+            winningsBalance:
+              runnerBalance + secondPrize,
+          },
+          { merge: true }
+        );
+
+        // 10. Save result and credit status
+        transaction.update(tournamentRef, {
+          winnerId,
+          runnerId,
+          prizeCredited: true,
+          prizeCreditedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        return {
+          winnerId,
+          runnerId,
+          firstPrize,
+          secondPrize,
+        };
+      }
+    );
+
+    onTournamentUpdated?.({
+      winnerId: result.winnerId,
+      runnerId: result.runnerId,
+      prizeCredited: true,
+    });
+
+    alert(
+      `Final result saved successfully!\n\nWinner: ₹${result.firstPrize} credited.\nRunner-up: ₹${result.secondPrize} credited.`
+    );
+  } catch (error) {
+    console.error(
+      "Final result and prize credit error:",
+      error
+    );
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Failed to save final result and credit prizes."
+    );
+  } finally {
+    setSavingFinal(false);
+  }
+}
 
   /* ------------------------------------------------------------------------ */
   /* EDIT PLAYERS                                                             */
@@ -1184,6 +1432,70 @@ export default function FixtureTab8Players({
                 setEditPenaltyWinner
               }
             />
+
+            {/* SAVE FINAL RESULT */}
+
+<div className="mt-5 rounded-2xl border border-[#18a957]/20 bg-white p-4 shadow-sm">
+
+  <div className="mb-3">
+    <p className="text-[11px] font-black uppercase text-[#18a957]">
+      Tournament Prize
+    </p>
+
+    <p className="mt-1 text-xs font-bold text-[#555]">
+      Winner and runner-up prize will be credited to their winnings balance.
+    </p>
+  </div>
+
+  <div className="mb-4 grid grid-cols-2 gap-3">
+
+    <div className="rounded-xl bg-[#f0faf4] p-3">
+      <p className="text-[9px] font-black uppercase text-[#18a957]">
+        Winner Prize
+      </p>
+
+      <p className="mt-1 text-lg font-black text-[#222]">
+        ₹{Number(tournament.firstPrize || 0)}
+      </p>
+    </div>
+
+    <div className="rounded-xl bg-[#f0faf4] p-3">
+      <p className="text-[9px] font-black uppercase text-[#18a957]">
+        Runner-up Prize
+      </p>
+
+      <p className="mt-1 text-lg font-black text-[#222]">
+        ₹{Number(tournament.secondPrize || 0)}
+      </p>
+    </div>
+
+  </div>
+
+  <button
+    type="button"
+    onClick={saveFinalResult}
+    disabled={
+      savingFinal ||
+      savingMatch !== null ||
+      tournament.prizeCredited === true ||
+      !getWinner(7)
+    }
+    className="w-full rounded-xl bg-[#18a957] py-3.5 text-xs font-black text-white transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+  >
+    {tournament.prizeCredited
+      ? "PRIZE ALREADY CREDITED"
+      : savingFinal
+        ? "CREDITING PRIZES..."
+        : "SAVE FINAL RESULT & CREDIT PRIZES"}
+  </button>
+
+  {tournament.prizeCredited && (
+    <p className="mt-3 text-center text-[10px] font-bold text-[#18a957]">
+      Winner and runner-up prizes have already been credited.
+    </p>
+  )}
+
+</div>
           </div>
         </div>
       )}

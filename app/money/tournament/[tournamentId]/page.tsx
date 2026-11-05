@@ -14,6 +14,7 @@ import { auth, db } from "@/lib/firebase";
 import PlayersTab from "./PlayersTab";
 import FixtureTab from "./FixtureTab";
 import FixtureTab8Players from "./FixtureTab8Players";
+import FixtureTab4Players from "./FixtureTab4Players";
 
 /* =================================================
    TYPES
@@ -31,6 +32,8 @@ type Tournament = {
   time: string;
   status: string;
   bannerType?: number;
+  firstPrize?: number;
+  secondPrize?: number;
 
   roomCode?: string;
   roomCodeA?: string;
@@ -462,6 +465,9 @@ export default function MoneyTournamentDetailsPage() {
 
             bannerType: Number(data.bannerType || 0),
 
+            firstPrize: Number(data.firstPrize || 0),
+secondPrize: Number(data.secondPrize || 0),
+
             entryFee: Number(
               data.entryFee || 0
             ),
@@ -770,16 +776,112 @@ export default function MoneyTournamentDetailsPage() {
 
         
 {/* ==========================================
-    MONEY TOURNAMENT BANNER
+    TOURNAMENT BANNER
 ========================================== */}
 
-<section className="w-full overflow-hidden bg-[#111111]">
-  <img
-    src={getTournamentImage(tournament)}
-    alt={`${tournament.entryFee} Points Money Tournament`}
-    className="block h-auto w-full object-cover"
-  />
-</section>
+{tournament.maxPlayers === 4 ? (
+
+  /* 4 PLAYER CUSTOM BANNER */
+
+  <section className="relative overflow-hidden bg-[#101010] px-5 py-6">
+
+    {/* Background accents */}
+
+    <div className="absolute -right-10 -top-12 h-40 w-40 rounded-full border-[20px] border-[#FFD600]/10" />
+
+    <div className="absolute -bottom-16 -left-12 h-40 w-40 rounded-full border-[20px] border-[#FFD600]/10" />
+
+    <div className="relative z-10">
+
+      {/* Heading */}
+
+      <div className="text-center">
+
+        <div className="inline-flex items-center rounded-full bg-[#FFD600] px-4 py-1 text-[10px] font-black uppercase tracking-[2px] text-black">
+          TOURNEX EXCLUSIVE
+        </div>
+
+        <h1 className="mt-3 text-[30px] font-black italic leading-none text-white">
+          4 PLAYER
+        </h1>
+
+        <h2 className="mt-1 text-[25px] font-black italic leading-none text-[#FFD600]">
+          SHOWDOWN
+        </h2>
+
+        <p className="mt-2 text-[10px] font-bold tracking-[3px] text-[#999999]">
+          ONLY FOUR. ONE CHAMPION.
+        </p>
+
+      </div>
+
+      {/* Prize cards */}
+
+      <div className="mt-6 grid grid-cols-2 gap-3">
+
+        {/* FIRST PRIZE */}
+
+        <div className="rounded-xl border border-[#FFD600] bg-[#FFD600] px-3 py-4 text-center">
+
+          <div className="text-[10px] font-black tracking-[2px] text-black/60">
+            🏆 1ST PRIZE
+          </div>
+
+          <div className="mt-2 text-[27px] font-black leading-none text-black">
+            ₹{tournament.firstPrize ?? 0}
+          </div>
+
+        </div>
+
+        {/* SECOND PRIZE */}
+
+        <div className="rounded-xl border border-[#555555] bg-[#222222] px-3 py-4 text-center">
+
+          <div className="text-[10px] font-black tracking-[2px] text-[#FFD600]">
+            🥈 2ND PRIZE
+          </div>
+
+          <div className="mt-2 text-[27px] font-black leading-none text-white">
+            ₹{tournament.secondPrize ?? 0}
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* Entry fee */}
+
+      <div className="mt-4 flex items-center justify-between rounded-lg border border-[#444444] bg-[#1b1b1b] px-4 py-3">
+
+        <span className="text-[11px] font-black uppercase tracking-[1px] text-[#aaaaaa]">
+          Entry Fee
+        </span>
+
+        <span className="text-[19px] font-black text-[#FFD600]">
+          ₹{tournament.entryFee}
+        </span>
+
+      </div>
+
+    </div>
+
+  </section>
+
+) : (
+
+  /* EXISTING 8 & 16 PLAYER IMAGE BANNERS */
+
+  <section className="w-full overflow-hidden bg-[#111111]">
+
+    <img
+      src={getTournamentImage(tournament)}
+      alt={`${tournament.entryFee} Points Money Tournament`}
+      className="block h-auto w-full object-cover"
+    />
+
+  </section>
+
+)}
 
 
         {/* ==========================================
@@ -951,22 +1053,14 @@ export default function MoneyTournamentDetailsPage() {
 
           {/* FIXTURE */}
 
-          {activeTab ===
-            "fixture" &&
-            (tournament.maxPlayers ===
-            8 ? (
-              <FixtureTab8Players
-                tournament={
-                  tournament
-                }
-              />
-            ) : (
-              <FixtureTab
-                tournament={
-                  tournament
-                }
-              />
-            ))}
+          {activeTab === "fixture" &&
+  (tournament.maxPlayers === 4 ? (
+    <FixtureTab4Players tournament={tournament} />
+  ) : tournament.maxPlayers === 8 ? (
+    <FixtureTab8Players tournament={tournament} />
+  ) : (
+    <FixtureTab tournament={tournament} />
+  ))}
 
         </section>
       </div>

@@ -16,6 +16,7 @@ import { auth, db } from "@/lib/firebase";
 import PlayersTab from "./PlayersTab";
 import FixtureTab from "./FixtureTab";
 import FixtureTab8Players from "./FixtureTab8Players";
+import FixtureTab4Players from "./FixtureTab4Players";
 
 type Tournament = {
   id: string;
@@ -366,28 +367,113 @@ export default function MoneyTournamentManagePage() {
     <main className="min-h-screen bg-[#eeeeee]">
       <div className="mx-auto min-h-screen max-w-md bg-white pb-10 shadow-[0_0_40px_rgba(0,0,0,0.08)]">
         {/* BANNER */}
-        <div className="relative w-full overflow-hidden bg-[#f4f4f4]">
-          <img
-            src={`/images/money/${banner}.png`}
-            alt="Money Tournament Banner"
-            className="block h-auto w-full object-cover"
-          />
 
-          <button
-            type="button"
-            onClick={() =>
-              router.push("/admin/money-tournaments")
-            }
-            className="absolute left-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-xl font-black text-black shadow"
-            aria-label="Back"
-          >
-            ‹
-          </button>
+{tournament.maxPlayers === 4 ? (
 
-          <div className="absolute right-3 top-3 rounded-full bg-black/90 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white">
-            Admin
-          </div>
+  /* 4 PLAYER CUSTOM BANNER */
+
+  <section className="relative overflow-hidden bg-[#101010] px-5 py-6">
+
+    <div className="absolute -right-10 -top-12 h-40 w-40 rounded-full border-[20px] border-[#FFD600]/10" />
+
+    <div className="absolute -bottom-16 -left-12 h-40 w-40 rounded-full border-[20px] border-[#FFD600]/10" />
+
+    <div className="relative z-10">
+
+      <div className="text-center">
+
+        <div className="inline-flex items-center rounded-full bg-[#FFD600] px-4 py-1 text-[10px] font-black uppercase tracking-[2px] text-black">
+          TOURNEX EXCLUSIVE
         </div>
+
+        <h1 className="mt-3 text-[30px] font-black italic leading-none text-white">
+          4 PLAYER
+        </h1>
+
+        <h2 className="mt-1 text-[25px] font-black italic leading-none text-[#FFD600]">
+          SHOWDOWN
+        </h2>
+
+        <p className="mt-2 text-[10px] font-bold tracking-[3px] text-[#999999]">
+          ONLY FOUR. ONE CHAMPION.
+        </p>
+
+      </div>
+
+      <div className="mt-6 grid grid-cols-2 gap-3">
+
+        <div className="rounded-xl border border-[#FFD600] bg-[#FFD600] px-3 py-4 text-center">
+
+          <div className="text-[10px] font-black tracking-[2px] text-black/60">
+            🏆 1ST PRIZE
+          </div>
+
+          <div className="mt-2 text-[27px] font-black leading-none text-black">
+            ₹{tournament.firstPrize ?? 0}
+          </div>
+
+        </div>
+
+        <div className="rounded-xl border border-[#555555] bg-[#222222] px-3 py-4 text-center">
+
+          <div className="text-[10px] font-black tracking-[2px] text-[#FFD600]">
+            🥈 2ND PRIZE
+          </div>
+
+          <div className="mt-2 text-[27px] font-black leading-none text-white">
+            ₹{tournament.secondPrize ?? 0}
+          </div>
+
+        </div>
+
+      </div>
+
+      <div className="mt-4 flex items-center justify-between rounded-lg border border-[#444444] bg-[#1b1b1b] px-4 py-3">
+
+        <span className="text-[11px] font-black uppercase tracking-[1px] text-[#aaaaaa]">
+          Entry Fee
+        </span>
+
+        <span className="text-[19px] font-black text-[#FFD600]">
+          ₹{tournament.entryFee}
+        </span>
+
+      </div>
+
+    </div>
+
+  </section>
+
+) : (
+
+  /* EXISTING 8 & 16 PLAYER IMAGE BANNERS */
+
+  <div className="relative w-full overflow-hidden bg-[#f4f4f4]">
+
+    <img
+      src={`/images/money/${banner}.png`}
+      alt="Money Tournament Banner"
+      className="block h-auto w-full object-cover"
+    />
+
+    <button
+      type="button"
+      onClick={() =>
+        router.push("/admin/money-tournaments")
+      }
+      className="absolute left-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-xl font-black text-black shadow"
+      aria-label="Back"
+    >
+      ‹
+    </button>
+
+    <div className="absolute right-3 top-3 rounded-full bg-black/90 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white">
+      Admin
+    </div>
+
+  </div>
+
+)}
 
         {/* MAIN DETAILS */}
         <div className="px-3 pt-3">
@@ -469,22 +555,37 @@ export default function MoneyTournamentManagePage() {
               />
             )}
 
-            {activeTab === "fixture" &&
-              (tournament.maxPlayers === 8 ? (
-                <FixtureTab8Players
-                  tournament={tournament}
-                  onTournamentUpdated={
-                    handleTournamentUpdated
-                  }
-                />
-              ) : (
-                <FixtureTab
-                  tournament={tournament}
-                  onTournamentUpdated={
-                    handleTournamentUpdated
-                  }
-                />
-              ))}
+            {activeTab === "fixture" && (() => {
+  switch (tournament.maxPlayers) {
+    case 4:
+      return (
+        <FixtureTab4Players
+          tournament={tournament}
+          onTournamentUpdated={handleTournamentUpdated}
+        />
+      );
+    case 8:
+      return (
+        <FixtureTab8Players
+          tournament={tournament}
+          onTournamentUpdated={handleTournamentUpdated}
+        />
+      );
+    case 16:
+      return (
+        <FixtureTab
+          tournament={tournament}
+          onTournamentUpdated={handleTournamentUpdated}
+        />
+      );
+    default:
+      return (
+        <div className="p-6 text-center text-sm font-bold text-red-500">
+          Invalid maxPlayers: {tournament.maxPlayers}
+        </div>
+      );
+  }
+})()}
 
             {activeTab === "prizes" && (
               <div className="space-y-4">

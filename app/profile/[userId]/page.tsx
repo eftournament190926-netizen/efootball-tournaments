@@ -1,10 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  getDocs,
+  collection,
+} from "firebase/firestore";
 import { useParams, useRouter } from "next/navigation";
 
 import { db } from "@/lib/firebase";
+
+/* =================================================
+   TYPES
+================================================= */
 
 type TournamentStats = {
   matches?: number;
@@ -24,6 +33,24 @@ type UserData = {
   tournamentStats?: TournamentStats;
 };
 
+type RankingPlayer = {
+  id: string;
+  points: number;
+  goalDifference: number;
+  goals: number;
+  wins: number;
+};
+
+type PlayerRanking = {
+  rank: number;
+  points: number;
+  totalPlayers: number;
+};
+
+/* =================================================
+   PUBLIC PROFILE PAGE
+================================================= */
+
 export default function PublicProfilePage() {
   const router = useRouter();
   const params = useParams();
@@ -42,10 +69,23 @@ export default function PublicProfilePage() {
   const [notFound, setNotFound] =
     useState(false);
 
+  /* RANKING STATES */
+
+  const [playerRanking, setPlayerRanking] =
+    useState<PlayerRanking | null>(null);
+
+  const [rankingLoading, setRankingLoading] =
+    useState(true);
+
+  /* =================================================
+     LOAD USER + RANKING
+  ================================================= */
+
   useEffect(() => {
     if (!userId) {
       setLoading(false);
       setNotFound(true);
+      setRankingLoading(false);
       return;
     }
 
@@ -54,6 +94,9 @@ export default function PublicProfilePage() {
     async function loadUser() {
       try {
         setLoading(true);
+        setRankingLoading(true);
+
+        /* LOAD PROFILE */
 
         const userRef = doc(
           db,
@@ -61,24 +104,138 @@ export default function PublicProfilePage() {
           userId
         );
 
-        const userSnap =
-          await getDoc(userRef);
+        const userSnap = await getDoc(userRef);
 
         if (!userSnap.exists()) {
           if (!cancelled) {
             setNotFound(true);
             setUserData(null);
+            setPlayerRanking(null);
           }
 
           return;
         }
 
-        if (!cancelled) {
-          setUserData(
-            userSnap.data() as UserData
+        if (cancelled) return;
+
+        const profileData =
+          userSnap.data() as UserData;
+
+        setUserData(profileData);
+        setNotFound(false);
+
+        /* =========================================
+           LOAD ALL USERS FOR RANKING
+        ========================================= */
+
+        const usersSnapshot = await getDocs(
+          collection(db, "users")
+        );
+
+        if (cancelled) return;
+
+        const rankedPlayers: RankingPlayer[] = [];
+
+        usersSnapshot.forEach((userDocument) => {
+          const data = userDocument.data();
+
+          const stats: TournamentStats =
+            data.tournamentStats || {};
+
+          const matches = Number(
+            stats.matches || 0
           );
 
-          setNotFound(false);
+          const tournamentPlayed = Number(
+            stats.tournamentPlayed || 0
+          );
+
+          // Exclude players without tournament activity.
+          if (
+            matches === 0 &&
+            tournamentPlayed === 0
+          ) {
+            return;
+          }
+
+          const wins = Number(stats.wins || 0);
+          const losses = Number(stats.losses || 0);
+          const goals = Number(stats.goals || 0);
+          const conceded = Number(stats.conceded || 0);
+
+          const tournamentWon = Number(
+            stats.tournamentWon || 0
+          );
+
+          const tournamentRunner = Number(
+            stats.tournamentRunner || 0
+          );
+
+          /* SAME LEADERBOARD FORMULA */
+
+          const points =
+            wins * 3 -
+            losses * 2 +
+            tournamentWon * 3 +
+            tournamentRunner * 2;
+
+          rankedPlayers.push({
+            id: userDocument.id,
+            points,
+            goalDifference: goals - conceded,
+            goals,
+            wins,
+          });
+        });
+
+        /* =========================================
+           SORT RANKING
+        ========================================= */
+
+        rankedPlayers.sort((a, b) => {
+          if (a.points !== b.points) {
+            return b.points - a.points;
+          }
+
+          if (
+            a.goalDifference !== b.goalDifference
+          ) {
+            return (
+              b.goalDifference - a.goalDifference
+            );
+          }
+
+          if (a.goals !== b.goals) {
+            return b.goals - a.goals;
+          }
+
+          if (a.wins !== b.wins) {
+            return b.wins - a.wins;
+          }
+
+          return 0;
+        });
+
+        /* =========================================
+           FIND THIS PROFILE'S RANK
+        ========================================= */
+
+        const playerIndex =
+          rankedPlayers.findIndex(
+            (player) => player.id === userId
+          );
+
+        if (!cancelled) {
+          if (playerIndex !== -1) {
+            setPlayerRanking({
+              rank: playerIndex + 1,
+              points:
+                rankedPlayers[playerIndex].points,
+              totalPlayers: rankedPlayers.length,
+            });
+          } else {
+            setPlayerRanking(null);
+          }
         }
       } catch (error) {
         console.error(
@@ -92,6 +249,7 @@ export default function PublicProfilePage() {
       } finally {
         if (!cancelled) {
           setLoading(false);
+          setRankingLoading(false);
         }
       }
     }
@@ -181,28 +339,16 @@ export default function PublicProfilePage() {
     Number(tournament.conceded || 0);
 
   const tournamentPlayed =
-    Number(
-      tournament.tournamentPlayed || 0
-    );
+    Number(tournament.tournamentPlayed || 0);
 
   const tournamentWon =
-    Number(
-      tournament.tournamentWon || 0
-    );
+    Number(tournament.tournamentWon || 0);
 
   const tournamentRunner =
-    Number(
-      tournament.tournamentRunner || 0
-    );
+    Number(tournament.tournamentRunner || 0);
 
   const goalDifference =
     goals - conceded;
-
-  const rankingPoints =
-    wins * 3 -
-    losses * 2 +
-    tournamentWon * 3 +
-    tournamentRunner * 2;
 
   /* =================================================
      PAGE
@@ -212,13 +358,9 @@ export default function PublicProfilePage() {
     <main className="min-h-screen bg-[#eeeeee]">
       <div className="mx-auto min-h-screen max-w-md bg-[#f2f2f2] pb-8 shadow-[0_0_40px_rgba(0,0,0,0.08)]">
 
-        {/* =================================================
-            HEADER
-        ================================================= */}
+        {/* HEADER */}
 
         <section className="relative overflow-hidden bg-[#FFD600] px-5 pb-8 pt-5 text-[#111111]">
-
-          {/* DECORATION */}
 
           <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-black/[0.05]" />
 
@@ -247,9 +389,7 @@ export default function PublicProfilePage() {
             </div>
           </div>
 
-          {/* =================================================
-              PROFILE
-          ================================================= */}
+          {/* PROFILE */}
 
           <div className="relative z-10 mt-9 flex items-center gap-4">
 
@@ -260,10 +400,7 @@ export default function PublicProfilePage() {
                 {userData.profilePhoto ? (
                   <img
                     src={userData.profilePhoto}
-                    alt={
-                      userData.username ||
-                      "Player"
-                    }
+                    alt={userData.username || "Player"}
                     className="h-full w-full object-cover"
                   />
                 ) : (
@@ -282,20 +419,8 @@ export default function PublicProfilePage() {
 
             <div className="min-w-0">
               <h2 className="truncate text-[23px] font-black leading-tight text-[#111111]">
-                {userData.username ||
-                  "eFootball Player"}
+                {userData.username || "eFootball Player"}
               </h2>
-
-              <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full bg-[#111111] px-3 py-2">
-                <span className="text-[11px]">
-                  🎮
-                </span>
-
-                <span className="max-w-[170px] truncate text-[10px] font-black text-[#FFD600]">
-                  {userData.konamiId ||
-                    "Konami ID"}
-                </span>
-              </div>
             </div>
           </div>
 
@@ -316,9 +441,7 @@ export default function PublicProfilePage() {
           </div>
         </section>
 
-        {/* =================================================
-            STATS
-        ================================================= */}
+        {/* CAREER STATISTICS */}
 
         <section className="bg-[#eeeeee] px-3 py-5">
           <div className="overflow-hidden rounded-[20px] border border-[#d8d8d8] bg-white shadow-[0_5px_16px_rgba(0,0,0,0.05)]">
@@ -413,24 +536,68 @@ export default function PublicProfilePage() {
             </div>
           </div>
 
-          {/* =================================================
-              RANKING POINTS
-          ================================================= */}
+          {/* PLAYER RANKING */}
 
-          <div className="mt-4 overflow-hidden rounded-[18px] bg-[#111111] shadow-[0_5px_16px_rgba(0,0,0,0.10)]">
-            <div className="flex items-center justify-between px-5 py-5">
+          <div className="mt-4 overflow-hidden rounded-[18px] border border-[#dedede] bg-white shadow-[0_4px_14px_rgba(0,0,0,0.05)]">
+
+            <div className="flex items-center justify-between bg-[#111111] px-4 py-3">
               <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#FFD600]/70">
-                  Ranking Points
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#FFD600]">
+                  Player Ranking
                 </p>
 
-                <p className="mt-1 text-[11px] font-bold text-white/45">
-                  Overall tournament score
+                <p className="mt-1 text-[9px] font-bold text-white/50">
+                  Overall Tournament Position
                 </p>
               </div>
 
-              <div className="rounded-[13px] bg-[#FFD600] px-5 py-3 text-[28px] font-black leading-none text-[#111111]">
-                {rankingPoints}
+              <span className="text-[22px]">
+                🏆
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between px-5 py-5">
+
+              {/* RANK */}
+
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-wider text-[#999999]">
+                  Player Position
+                </p>
+
+                {rankingLoading ? (
+                  <p className="mt-2 text-[13px] font-bold text-[#999999]">
+                    Calculating...
+                  </p>
+                ) : playerRanking ? (
+                  <p className="mt-1 text-[32px] font-black text-[#111111]">
+                    #{playerRanking.rank}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-[12px] font-bold text-[#999999]">
+                    Not Ranked Yet
+                  </p>
+                )}
+              </div>
+
+              {/* POINTS */}
+
+              <div className="text-right">
+                <p className="text-[9px] font-black uppercase tracking-wider text-[#999999]">
+                  Ranking Points
+                </p>
+
+                <p className="mt-1 text-[27px] font-black text-[#111111]">
+                  {rankingLoading
+                    ? "..."
+                    : playerRanking?.points ?? 0}
+                </p>
+
+                <p className="text-[9px] font-bold text-[#999999]">
+                  {playerRanking
+                    ? `Out of ${playerRanking.totalPlayers} players`
+                    : "Play tournaments to rank"}
+                </p>
               </div>
             </div>
           </div>

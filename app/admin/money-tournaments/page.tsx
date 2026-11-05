@@ -17,7 +17,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
-type PlayerCategory = 8 | 16;
+type PlayerCategory = 4 | 8 | 16;
 type BannerType = 10 | 20 | 30 | 40 | 50 | 100;
 
 type PrizeAmounts = [number, number, number, number];
@@ -43,8 +43,6 @@ type MoneyTournament = {
 const bannerOptions: BannerType[] = [
   10, 20, 30, 40, 50, 100,
 ];
-
-// AUTOMATIC PRIZE DISTRIBUTION
 
 const prizePresets: Record<BannerType, PrizeAmounts> = {
   10: [50, 25, 0, 0],
@@ -92,8 +90,6 @@ export default function MoneyTournamentAdminPage() {
 
   const [entryFee, setEntryFee] = useState("10");
 
-  // INITIAL PRIZES FOR 10.png
-
   const [firstPrize, setFirstPrize] = useState("50");
   const [secondPrize, setSecondPrize] = useState("25");
   const [thirdPrize, setThirdPrize] = useState("0");
@@ -114,7 +110,7 @@ export default function MoneyTournamentAdminPage() {
   const [success, setSuccess] = useState("");
 
   // ---------------------------------------
-  // SELECT BANNER + AUTO SET PRIZES
+  // PRIZE SETTINGS
   // ---------------------------------------
 
   function selectBanner(option: BannerType) {
@@ -132,10 +128,29 @@ export default function MoneyTournamentAdminPage() {
     setSuccess("");
   }
 
+  function selectPlayers(count: PlayerCategory) {
+    setPlayers(count);
+
+    if (count === 4) {
+      setThirdPrize("0");
+      setFourthPrize("0");
+    } else {
+      const [first, second, third, fourth] =
+        prizePresets[bannerType];
+
+      setFirstPrize(String(first));
+      setSecondPrize(String(second));
+      setThirdPrize(String(third));
+      setFourthPrize(String(fourth));
+    }
+
+    setError("");
+    setSuccess("");
+  }
+
   const hasFourPrizes =
-    bannerType === 40 ||
-    bannerType === 50 ||
-    bannerType === 100;
+    players !== 4 &&
+    [40, 50, 100].includes(bannerType);
 
   const totalPrize =
     (Number(firstPrize) || 0) +
@@ -144,7 +159,7 @@ export default function MoneyTournamentAdminPage() {
     (hasFourPrizes ? Number(fourthPrize) || 0 : 0);
 
   // ---------------------------------------
-  // LOAD MONEY TOURNAMENTS
+  // LOAD TOURNAMENTS
   // ---------------------------------------
 
   const loadTournaments = useCallback(async () => {
@@ -161,6 +176,12 @@ export default function MoneyTournamentAdminPage() {
       const data: MoneyTournament[] =
         snapshot.docs.map((item) => {
           const value = item.data();
+
+          const maxPlayers = Number(
+            value.maxPlayers ??
+            value.category ??
+            16
+          ) as PlayerCategory;
 
           return {
             id: item.id,
@@ -179,13 +200,8 @@ export default function MoneyTournamentAdminPage() {
             thirdPrize: Number(value.thirdPrize ?? 0),
             fourthPrize: Number(value.fourthPrize ?? 0),
 
-            category: Number(
-              value.category ??
-              value.maxPlayers ??
-              16
-            ) as PlayerCategory,
-
-            maxPlayers: Number(value.maxPlayers ?? 16),
+            category: maxPlayers,
+            maxPlayers,
 
             registeredPlayers: Number(
               value.registeredPlayers ?? 0
@@ -324,7 +340,10 @@ export default function MoneyTournamentAdminPage() {
       await addDoc(
         collection(db, "moneyTournaments"),
         {
-          type: `${bannerType} money tournament`,
+          type:
+            players === 4
+              ? "4 player money tournament"
+              : `${bannerType} money tournament`,
 
           bannerType,
 
@@ -371,15 +390,20 @@ export default function MoneyTournamentAdminPage() {
       setDate("");
       setTime("");
 
-      // KEEP SELECTED BANNER PRIZES AFTER CREATE
+      if (players === 4) {
+        setFirstPrize("50");
+        setSecondPrize("25");
+        setThirdPrize("0");
+        setFourthPrize("0");
+      } else {
+        const [first, second, third, fourth] =
+          prizePresets[bannerType];
 
-      const [first, second, third, fourth] =
-        prizePresets[bannerType];
-
-      setFirstPrize(String(first));
-      setSecondPrize(String(second));
-      setThirdPrize(String(third));
-      setFourthPrize(String(fourth));
+        setFirstPrize(String(first));
+        setSecondPrize(String(second));
+        setThirdPrize(String(third));
+        setFourthPrize(String(fourth));
+      }
 
       await loadTournaments();
     } catch (err) {
@@ -494,85 +518,28 @@ export default function MoneyTournamentAdminPage() {
             </h2>
 
             <p className="mt-1 text-xs text-gray-500">
-              Select banner to automatically set cash prizes.
+              Select players and configure tournament prizes.
             </p>
-
-            {/* BANNER TYPE */}
-
-            <label className="mt-5 block text-xs font-black uppercase text-gray-600">
-              Tournament Banner
-            </label>
-
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              {bannerOptions.map((option) => {
-                const active = bannerType === option;
-
-                return (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => selectBanner(option)}
-                    className={`overflow-hidden rounded-xl border text-left transition ${
-                      active
-                        ? "border-yellow-500 bg-[#FFD600] text-black"
-                        : "border-gray-200 bg-white"
-                    }`}
-                  >
-                    <div className="h-[75px] overflow-hidden bg-black">
-                      <img
-                        src={getMoneyTournamentImage(
-                          option
-                        )}
-                        alt={`${option} tournament`}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-
-                    <div className="py-2 text-center text-xs font-black">
-                      {option}.png
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* BANNER PREVIEW */}
-
-            <div className="mt-4 overflow-hidden rounded-xl bg-[#111111]">
-              <img
-                src={getMoneyTournamentImage(
-                  bannerType
-                )}
-                alt="Selected tournament banner"
-                className="aspect-[16/9] w-full object-cover"
-              />
-
-              <p className="py-3 text-center text-xs font-black text-[#FFD600]">
-                SELECTED BANNER: {bannerType}.png
-              </p>
-            </div>
 
             {/* PLAYERS */}
 
             <label className="mt-5 block text-xs font-black uppercase text-gray-600">
-              Players
+              Tournament Players
             </label>
 
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {([8, 16] as const).map((count) => {
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {([4, 8, 16] as const).map((count) => {
                 const active = players === count;
 
                 return (
                   <button
                     key={count}
                     type="button"
-                    onClick={() =>
-                      setPlayers(count)
-                    }
-                    className={`rounded-xl border py-3 text-sm font-black ${
+                    onClick={() => selectPlayers(count)}
+                    className={`rounded-xl border py-3 text-sm font-black transition ${
                       active
                         ? "border-gray-900 bg-gray-900 text-white"
-                        : "border-gray-200 bg-white"
+                        : "border-gray-200 bg-white text-gray-700"
                     }`}
                   >
                     {count} PLAYERS
@@ -580,6 +547,107 @@ export default function MoneyTournamentAdminPage() {
                 );
               })}
             </div>
+
+            {/* BANNER TYPE - ONLY 8 / 16 */}
+
+            {players !== 4 && (
+              <>
+                <label className="mt-5 block text-xs font-black uppercase text-gray-600">
+                  Tournament Banner
+                </label>
+
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {bannerOptions.map((option) => {
+                    const active = bannerType === option;
+
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => selectBanner(option)}
+                        className={`overflow-hidden rounded-xl border text-left transition ${
+                          active
+                            ? "border-yellow-500 bg-[#FFD600] text-black"
+                            : "border-gray-200 bg-white"
+                        }`}
+                      >
+                        <div className="h-[75px] overflow-hidden bg-black">
+                          <img
+                            src={getMoneyTournamentImage(option)}
+                            alt={`${option} tournament`}
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+
+                        <div className="py-2 text-center text-xs font-black">
+                          {option}.png
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* BANNER PREVIEW */}
+
+                <div className="mt-4 overflow-hidden rounded-xl bg-[#111111]">
+                  <img
+                    src={getMoneyTournamentImage(bannerType)}
+                    alt="Selected tournament banner"
+                    className="aspect-[16/9] w-full object-cover"
+                  />
+
+                  <p className="py-3 text-center text-xs font-black text-[#FFD600]">
+                    SELECTED BANNER: {bannerType}.png
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* FOUR PLAYER BANNER PREVIEW */}
+
+            {players === 4 && (
+              <div className="mt-4 overflow-hidden rounded-xl border border-yellow-500 bg-[#111111]">
+                <div className="relative flex aspect-[16/9] flex-col items-center justify-center bg-gradient-to-br from-[#262626] via-black to-[#3a3000] px-4 text-center">
+                  <p className="text-[10px] font-black tracking-[0.3em] text-[#FFD600]">
+                    EXCLUSIVE TOURNAMENT
+                  </p>
+
+                  <h3 className="mt-3 text-3xl font-black italic text-white">
+                    4 PLAYER
+                  </h3>
+
+                  <h3 className="text-3xl font-black italic text-[#FFD600]">
+                    SHOWDOWN
+                  </h3>
+
+                  <div className="mt-4 flex items-center gap-6">
+                    <div>
+                      <p className="text-[9px] font-bold text-gray-400">
+                        1ST PRIZE
+                      </p>
+                      <p className="text-xl font-black text-[#FFD600]">
+                        ₹{firstPrize || 0}
+                      </p>
+                    </div>
+
+                    <div className="h-8 w-px bg-gray-600" />
+
+                    <div>
+                      <p className="text-[9px] font-bold text-gray-400">
+                        2ND PRIZE
+                      </p>
+                      <p className="text-xl font-black text-white">
+                        ₹{secondPrize || 0}
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="mt-3 rounded-full bg-[#FFD600] px-4 py-1 text-[10px] font-black text-black">
+                    ENTRY {entryFee || 0} POINTS
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* ENTRY FEE */}
 
@@ -648,7 +716,7 @@ export default function MoneyTournamentAdminPage() {
                 />
               </div>
 
-              {/* THIRD & FOURTH PRIZE */}
+              {/* THIRD AND FOURTH PRIZE */}
 
               {hasFourPrizes && (
                 <>
@@ -686,6 +754,12 @@ export default function MoneyTournamentAdminPage() {
                 </>
               )}
             </div>
+
+            {players === 4 && (
+              <p className="mt-2 text-[10px] font-semibold text-gray-500">
+                4-player tournaments have only 1st and 2nd prizes.
+              </p>
+            )}
 
             {/* TOTAL CASH PRIZE */}
 
@@ -837,16 +911,56 @@ export default function MoneyTournamentAdminPage() {
                     {/* BANNER */}
 
                     <div className="relative bg-[#111111]">
-                      <img
-                        src={getMoneyTournamentImage(
-                          tournament.bannerType
-                        )}
-                        alt="Money tournament banner"
-                        className="aspect-[16/9] w-full object-cover"
-                      />
+                      {tournament.maxPlayers === 4 ? (
+                        <div className="flex aspect-[16/9] flex-col items-center justify-center bg-gradient-to-br from-[#262626] via-black to-[#3a3000] text-center">
+                          <p className="text-[10px] font-black tracking-[0.3em] text-[#FFD600]">
+                            EXCLUSIVE TOURNAMENT
+                          </p>
+
+                          <h3 className="mt-2 text-3xl font-black italic text-white">
+                            4 PLAYER
+                          </h3>
+
+                          <h3 className="text-3xl font-black italic text-[#FFD600]">
+                            SHOWDOWN
+                          </h3>
+
+                          <div className="mt-3 flex items-center gap-6">
+                            <div>
+                              <p className="text-[9px] font-bold text-gray-400">
+                                1ST PRIZE
+                              </p>
+                              <p className="text-lg font-black text-[#FFD600]">
+                                ₹{tournament.firstPrize}
+                              </p>
+                            </div>
+
+                            <div>
+                              <p className="text-[9px] font-bold text-gray-400">
+                                2ND PRIZE
+                              </p>
+                              <p className="text-lg font-black text-white">
+                                ₹{tournament.secondPrize}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <img
+                          src={getMoneyTournamentImage(
+                            tournament.bannerType
+                          )}
+                          alt="Money tournament banner"
+                          className="aspect-[16/9] w-full object-cover"
+                        />
+                      )}
 
                       <div className="absolute left-3 top-3 rounded-full bg-[#FFD600] px-3 py-1.5 text-[10px] font-black text-black">
                         {tournament.entryFee} P ENTRY
+                      </div>
+
+                      <div className="absolute right-3 top-3 rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-black">
+                        {tournament.maxPlayers} PLAYERS
                       </div>
                     </div>
 
@@ -947,36 +1061,37 @@ export default function MoneyTournamentAdminPage() {
                         />
                       </div>
 
-                      
-{/* ACTION BUTTONS */}
-<div className="flex gap-2">
-  <button
-    type="button"
-    onClick={() =>
-      router.push(
-        `/admin/money-tournaments/${tournament.id}`
-      )
-    }
-    className="flex-1 rounded-lg bg-[#111111] py-3 text-xs font-black text-[#FFD600]"
-  >
-    MANAGE
-  </button>
+                      {/* ACTION BUTTONS */}
 
-  <button
-    type="button"
-    disabled={
-      deletingId === tournament.id ||
-      tournament.registeredPlayers > 0
-    }
-    onClick={() => removeTournament(tournament)}
-    className="rounded-lg border border-red-200 px-4 py-3 text-xs font-black text-red-600 disabled:opacity-40"
-  >
-    {deletingId === tournament.id
-      ? "DELETING..."
-      : "DELETE"}
-  </button>
-</div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            router.push(
+                              `/admin/money-tournaments/${tournament.id}`
+                            )
+                          }
+                          className="flex-1 rounded-lg bg-[#111111] py-3 text-xs font-black text-[#FFD600]"
+                        >
+                          MANAGE
+                        </button>
 
+                        <button
+                          type="button"
+                          disabled={
+                            deletingId === tournament.id ||
+                            tournament.registeredPlayers > 0
+                          }
+                          onClick={() =>
+                            removeTournament(tournament)
+                          }
+                          className="rounded-lg border border-red-200 px-4 py-3 text-xs font-black text-red-600 disabled:opacity-40"
+                        >
+                          {deletingId === tournament.id
+                            ? "DELETING..."
+                            : "DELETE"}
+                        </button>
+                      </div>
                     </div>
                   </article>
                 ))}

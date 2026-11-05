@@ -2,66 +2,29 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  collection,
   deleteField,
   doc,
   getDoc,
   getDocs,
-  collection,
+  onSnapshot,
   query,
   runTransaction,
   serverTimestamp,
   updateDoc,
   where,
-  onSnapshot,
 } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 type Player = {
   id: string;
   username: string;
   profilePhoto?: string;
-};
-
-type Tournament = {
-  id: string;
-  maxPlayers?: number;
-  category?: string;
-  roomCode?: string;
-  roomCodeA?: string;
-  roomCodeB?: string;
-  semiFinalRoomCode?: string;
-  finalRoomCode?: string;
-
-  scores?: Record<
-    string,
-    {
-      p1Score: number;
-      p2Score: number;
-    }
-  >;
-
-  penaltyWinners?: Record<string, string>;
-
-  matchPlayers?: Record<
-    string,
-    {
-      player1Id: string;
-      player2Id: string;
-    }
-  >;
-};
-
-type Registration = {
-  id: string;
-  userId: string;
-  username?: string;
-  eFootballUsername?: string;
-  profilePhoto?: string;
-  status?: string;
-  createdAt?: {
-    seconds?: number;
-  };
 };
 
 type SavedScore = {
@@ -74,6 +37,51 @@ type SavedMatchPlayers = {
   player2Id: string;
 };
 
+type Tournament = {
+  id: string;
+  maxPlayers?: number;
+  entryFee?: number;
+  category?: string;
+
+  firstPrize?: number;
+  secondPrize?: number;
+  thirdPrize?: number;
+  fourthPrize?: number;
+
+  prizeCredited?: boolean;
+
+  winnerId?: string;
+  runnerId?: string;
+  thirdPlaceId?: string;
+  fourthPlaceId?: string;
+
+  roomCode?: string;
+  roomCodeA?: string;
+  roomCodeB?: string;
+  semiFinalRoomCode?: string;
+  finalRoomCode?: string;
+
+  scores?: Record<string, SavedScore>;
+  penaltyWinners?: Record<string, string>;
+  matchPlayers?: Record<string, SavedMatchPlayers>;
+};
+
+type Registration = {
+  id: string;
+  userId: string;
+  username?: string;
+  eFootballUsername?: string;
+  profilePhoto?: string;
+  status?: string;
+  createdAt?: { seconds?: number };
+};
+
+type Match = {
+  id: number;
+  player1: Player | null;
+  player2: Player | null;
+};
+
 type UserTournamentStats = {
   goals: number;
   conceded: number;
@@ -83,6 +91,11 @@ type UserTournamentStats = {
   tournamentPlayed: number;
   tournamentWon: number;
   tournamentRunner: number;
+};
+
+type FixtureTabProps = {
+  tournament: Tournament;
+  onTournamentUpdated?: (data: Partial<Tournament>) => void;
 };
 
 function emptyTournamentStats(): UserTournamentStats {
@@ -98,186 +111,16 @@ function emptyTournamentStats(): UserTournamentStats {
   };
 }
 
-function calculateTournamentStats(
-  scores: Record<string, SavedScore>,
-  matchPlayers: Record<string, SavedMatchPlayers>,
-  penaltyWinners: Record<string, string>,
-): Record<string, UserTournamentStats> {
-  const stats: Record<string, UserTournamentStats> = {};
-
-  function getPlayerStats(userId: string) {
-    if (!stats[userId]) {
-      stats[userId] = emptyTournamentStats();
-    }
-
-    return stats[userId];
-  }
-
-  /*
-   * Calculate every completed match in this tournament.
-   */
-  for (const matchId of Object.keys(scores)) {
-    const score = scores[matchId];
-    const match = matchPlayers[matchId];
-
-    if (!score || !match) {
-      continue;
-    }
-
-    const player1Id = match.player1Id;
-    const player2Id = match.player2Id;
-
-    if (!player1Id || !player2Id) {
-      continue;
-    }
-
-    const player1 = getPlayerStats(player1Id);
-    const player2 = getPlayerStats(player2Id);
-
-    /*
-     * GOALS
-     */
-    player1.goals += score.p1Score;
-    player2.goals += score.p2Score;
-
-    /*
-     * CONCEDED
-     */
-    player1.conceded += score.p2Score;
-    player2.conceded += score.p1Score;
-
-    /*
-     * MATCHES
-     *
-     * Every saved match = +1 match
-     */
-    player1.matches += 1;
-    player2.matches += 1;
-
-    /*
-     * WIN / LOSS
-     */
-    if (score.p1Score > score.p2Score) {
-      player1.wins += 1;
-      player2.losses += 1;
-    } else if (score.p2Score > score.p1Score) {
-      player2.wins += 1;
-      player1.losses += 1;
-    } else {
-      /*
-       * DRAW -> PENALTY WINNER
-       */
-      const penaltyWinnerId =
-        penaltyWinners[matchId];
-
-      if (penaltyWinnerId === player1Id) {
-        player1.wins += 1;
-        player2.losses += 1;
-      } else if (penaltyWinnerId === player2Id) {
-        player2.wins += 1;
-        player1.losses += 1;
-      }
-    }
-  }
-
-  /*
-   * TOURNAMENT PLAYED
-   *
-   * If a player has at least one completed match
-   * in this tournament, tournamentPlayed = 1.
-   *
-   * It does NOT increase again for Match 2, Match 3, etc.
-   */
-  for (const userId of Object.keys(stats)) {
-    if (stats[userId].matches > 0) {
-      stats[userId].tournamentPlayed = 1;
-    }
-  }
-
-  /*
-   * FINAL MATCH
-   *
-   * Match ID 15 = Grand Final
-   */
-  const finalScore = scores["15"];
-  const finalPlayers = matchPlayers["15"];
-
-  if (
-    finalScore &&
-    finalPlayers &&
-    finalPlayers.player1Id &&
-    finalPlayers.player2Id
-  ) {
-    let winnerId = "";
-    let runnerId = "";
-
-    /*
-     * Normal final result
-     */
-    if (finalScore.p1Score > finalScore.p2Score) {
-      winnerId = finalPlayers.player1Id;
-      runnerId = finalPlayers.player2Id;
-    } else if (
-      finalScore.p2Score > finalScore.p1Score
-    ) {
-      winnerId = finalPlayers.player2Id;
-      runnerId = finalPlayers.player1Id;
-    } else {
-      /*
-       * Draw -> penalty winner
-       */
-      const penaltyWinnerId =
-        penaltyWinners["15"];
-
-      if (
-        penaltyWinnerId ===
-        finalPlayers.player1Id
-      ) {
-        winnerId = finalPlayers.player1Id;
-        runnerId = finalPlayers.player2Id;
-      } else if (
-        penaltyWinnerId ===
-        finalPlayers.player2Id
-      ) {
-        winnerId = finalPlayers.player2Id;
-        runnerId = finalPlayers.player1Id;
-      }
-    }
-
-    /*
-     * Tournament Winner
-     */
-    if (winnerId) {
-      getPlayerStats(winnerId).tournamentWon = 1;
-    }
-
-    /*
-     * Tournament Runner-up
-     */
-    if (runnerId) {
-      getPlayerStats(runnerId).tournamentRunner = 1;
-    }
-  }
-
-  return stats;
-}
-
-type Match = {
-  id: number;
-  player1: Player | null;
-  player2: Player | null;
-};
-
-type FixtureTabProps = {
-  tournament: Tournament;
-  onTournamentUpdated?: (data: Partial<Tournament>) => void;
-};
+/* =========================================================
+   MAIN COMPONENT
+========================================================= */
 
 export default function FixtureTab({
   tournament,
   onTournamentUpdated,
 }: FixtureTabProps) {
   const [players, setPlayers] = useState<Player[]>([]);
+
   const [activeRound, setActiveRound] = useState<
     "round16" | "quarter" | "semi" | "final"
   >("round16");
@@ -294,7 +137,8 @@ export default function FixtureTab({
     Record<string, string>
   >(tournament.penaltyWinners || {});
 
-  const [editingMatchId, setEditingMatchId] = useState<number | null>(null);
+  const [editingMatchId, setEditingMatchId] =
+    useState<number | null>(null);
 
   const [editP1Score, setEditP1Score] = useState("");
   const [editP2Score, setEditP2Score] = useState("");
@@ -311,73 +155,66 @@ export default function FixtureTab({
   );
 
   const [savingRoomCode, setSavingRoomCode] = useState(false);
+  const [creditingPrizes, setCreditingPrizes] = useState(false);
+
+  const [prizeCredited, setPrizeCredited] = useState(
+    Boolean(tournament.prizeCredited),
+  );
+
+  const hasThirdPlaceMatch =
+    Number(tournament.entryFee || 0) >= 40;
+
+  /* =========================================================
+     FIRESTORE LISTENER
+  ========================================================= */
 
   useEffect(() => {
-  // Players data initial setup
-  loadPlayers();
+    loadPlayers();
 
-  const tournamentRef = doc(
-    db,
-    "moneyTournaments",
-    tournament.id,
-  );
+    const tournamentRef = doc(
+      db,
+      "moneyTournaments",
+      tournament.id,
+    );
 
-  const unsubscribe = onSnapshot(
-    tournamentRef,
-    (snapshot) => {
-      if (!snapshot.exists()) {
-        return;
-      }
+    const unsubscribe = onSnapshot(
+      tournamentRef,
+      (snapshot) => {
+        if (!snapshot.exists()) return;
 
-      const data = snapshot.data();
+        const data = snapshot.data();
 
-      setScores(
-        (data.scores || {}) as Record<
-          string,
-          SavedScore
-        >,
-      );
+        setScores(data.scores || {});
+        setMatchPlayers(data.matchPlayers || {});
+        setPenaltyWinners(data.penaltyWinners || {});
+        setSemiRoomCode(data.semiFinalRoomCode || "");
+        setPrizeCredited(Boolean(data.prizeCredited));
+      },
+      (error) => {
+        console.error("Tournament listener error:", error);
+      },
+    );
 
-      setMatchPlayers(
-        (data.matchPlayers || {}) as Record<
-          string,
-          SavedMatchPlayers
-        >,
-      );
-
-      setPenaltyWinners(
-        (data.penaltyWinners || {}) as Record<
-          string,
-          string
-        >,
-      );
-
-      setSemiRoomCode(
-        data.semiFinalRoomCode || "",
-      );
-    },
-    (error) => {
-      console.error(
-        "Tournament listener error:",
-        error,
-      );
-    },
-  );
-
-  return () => unsubscribe();
-}, [tournament.id]);
+    return () => unsubscribe();
+  }, [tournament.id]);
 
   useEffect(() => {
     setScores(tournament.scores || {});
     setMatchPlayers(tournament.matchPlayers || {});
     setPenaltyWinners(tournament.penaltyWinners || {});
     setSemiRoomCode(tournament.semiFinalRoomCode || "");
+    setPrizeCredited(Boolean(tournament.prizeCredited));
   }, [
     tournament.scores,
     tournament.matchPlayers,
     tournament.penaltyWinners,
     tournament.semiFinalRoomCode,
+    tournament.prizeCredited,
   ]);
+
+  /* =========================================================
+     LOAD PLAYERS
+  ========================================================= */
 
   async function loadPlayers() {
     try {
@@ -388,19 +225,22 @@ export default function FixtureTab({
 
       const registrationSnap = await getDocs(registrationsQuery);
 
-      const confirmedRegistrations: Registration[] = registrationSnap.docs
-  .map((item) => ({
-    id: item.id,
-    ...item.data(),
-  }) as Registration)
-        .filter((item) => {
-  return item.status === "confirmed";
-})
-.sort((a, b) => {
-          const aTime = a.createdAt?.seconds || 0;
-          const bTime = b.createdAt?.seconds || 0;
-          return aTime - bTime;
-        });
+      const confirmedRegistrations: Registration[] =
+        registrationSnap.docs
+          .map(
+            (item) =>
+              ({
+                id: item.id,
+                ...item.data(),
+              }) as Registration,
+          )
+          .filter((item) => item.status === "confirmed")
+          .sort((a, b) => {
+            return (
+              (a.createdAt?.seconds || 0) -
+              (b.createdAt?.seconds || 0)
+            );
+          });
 
       const loadedPlayers: Player[] = [];
 
@@ -426,10 +266,11 @@ export default function FixtureTab({
                 userData.eFootballUsername ||
                 username;
 
-              profilePhoto = userData.profilePhoto || profilePhoto;
+              profilePhoto =
+                userData.profilePhoto || profilePhoto;
             }
           } catch {
-            // Ignore missing user profile
+            // Ignore missing profile
           }
         }
 
@@ -446,88 +287,55 @@ export default function FixtureTab({
     }
   }
 
-  const poolAPlayers = useMemo(() => {
-    return players.slice(0, 8);
-  }, [players]);
-
-  const poolBPlayers = useMemo(() => {
-    return players.slice(8, 16);
-  }, [players]);
+  /* =========================================================
+     ROUND OF 16
+  ========================================================= */
 
   const round16Matches = useMemo<Match[]>(() => {
-    const result: Match[] = [];
-
-    for (let i = 0; i < 8; i++) {
+    return Array.from({ length: 8 }, (_, i) => {
       const matchId = i + 1;
-
       const saved = matchPlayers[String(matchId)];
-
-      const defaultPlayer1 = players[i * 2] || null;
-      const defaultPlayer2 = players[i * 2 + 1] || null;
-
-      result.push({
-        id: matchId,
-        player1:
-          players.find((player) => player.id === saved?.player1Id) ||
-          defaultPlayer1,
-        player2:
-          players.find((player) => player.id === saved?.player2Id) ||
-          defaultPlayer2,
-      });
-    }
-
-    return result;
-  }, [players, matchPlayers]);
-
-  function getWinner(matchId: number): Player | null {
-    const match = getMatchById(matchId);
-
-    if (!match?.player1 || !match.player2) {
-      return null;
-    }
-
-    const score = scores[String(matchId)];
-
-    if (!score) {
-      return null;
-    }
-
-    if (score.p1Score > score.p2Score) {
-      return match.player1;
-    }
-
-    if (score.p2Score > score.p1Score) {
-      return match.player2;
-    }
-
-    const penaltyWinnerId = penaltyWinners[String(matchId)];
-
-    if (!penaltyWinnerId) {
-      return null;
-    }
-
-    return (
-      match.player1.id === penaltyWinnerId
-        ? match.player1
-        : match.player2.id === penaltyWinnerId
-          ? match.player2
-          : null
-    );
-  }
-
-  function getMatchById(matchId: number): Match | null {
-    if (matchId >= 1 && matchId <= 8) {
-      return round16Matches.find((match) => match.id === matchId) || null;
-    }
-
-    if (matchId >= 9 && matchId <= 12) {
-      const source1 = matchId === 9 ? 1 : matchId === 10 ? 3 : matchId === 11 ? 5 : 7;
-      const source2 = source1 + 1;
 
       return {
         id: matchId,
-        player1: getWinner(source1),
-        player2: getWinner(source2),
+        player1:
+          players.find((p) => p.id === saved?.player1Id) ||
+          players[i * 2] ||
+          null,
+        player2:
+          players.find((p) => p.id === saved?.player2Id) ||
+          players[i * 2 + 1] ||
+          null,
+      };
+    });
+  }, [players, matchPlayers]);
+
+  /* =========================================================
+     MATCH LOOKUP
+  ========================================================= */
+
+  function getMatchById(matchId: number): Match | null {
+    if (matchId >= 1 && matchId <= 8) {
+      return (
+        round16Matches.find((match) => match.id === matchId) ||
+        null
+      );
+    }
+
+    if (matchId >= 9 && matchId <= 12) {
+      const source =
+        matchId === 9
+          ? 1
+          : matchId === 10
+            ? 3
+            : matchId === 11
+              ? 5
+              : 7;
+
+      return {
+        id: matchId,
+        player1: getWinner(source),
+        player2: getWinner(source + 1),
       };
     }
 
@@ -555,31 +363,73 @@ export default function FixtureTab({
       };
     }
 
+    if (matchId === 16) {
+      return {
+        id: 16,
+        player1: getLoser(13),
+        player2: getLoser(14),
+      };
+    }
+
     return null;
   }
 
+  /* =========================================================
+     WINNER
+  ========================================================= */
+
+  function getWinner(matchId: number): Player | null {
+    const match = getMatchById(matchId);
+
+    if (!match?.player1 || !match.player2) return null;
+
+    const score = scores[String(matchId)];
+    if (!score) return null;
+
+    if (score.p1Score > score.p2Score) return match.player1;
+    if (score.p2Score > score.p1Score) return match.player2;
+
+    const penaltyWinnerId = penaltyWinners[String(matchId)];
+
+    if (penaltyWinnerId === match.player1.id) return match.player1;
+    if (penaltyWinnerId === match.player2.id) return match.player2;
+
+    return null;
+  }
+
+  /* =========================================================
+     LOSER
+  ========================================================= */
+
+  function getLoser(matchId: number): Player | null {
+    const match = getMatchById(matchId);
+
+    if (!match?.player1 || !match.player2) return null;
+
+    const score = scores[String(matchId)];
+    if (!score) return null;
+
+    if (score.p1Score > score.p2Score) return match.player2;
+    if (score.p2Score > score.p1Score) return match.player1;
+
+    const penaltyWinnerId = penaltyWinners[String(matchId)];
+
+    if (penaltyWinnerId === match.player1.id) return match.player2;
+    if (penaltyWinnerId === match.player2.id) return match.player1;
+
+    return null;
+  }
+
+  /* =========================================================
+     ROUND MATCHES
+  ========================================================= */
+
   const quarterMatches = useMemo<Match[]>(() => {
     return [
-      {
-        id: 9,
-        player1: getWinner(1),
-        player2: getWinner(2),
-      },
-      {
-        id: 10,
-        player1: getWinner(3),
-        player2: getWinner(4),
-      },
-      {
-        id: 11,
-        player1: getWinner(5),
-        player2: getWinner(6),
-      },
-      {
-        id: 12,
-        player1: getWinner(7),
-        player2: getWinner(8),
-      },
+      { id: 9, player1: getWinner(1), player2: getWinner(2) },
+      { id: 10, player1: getWinner(3), player2: getWinner(4) },
+      { id: 11, player1: getWinner(5), player2: getWinner(6) },
+      { id: 12, player1: getWinner(7), player2: getWinner(8) },
     ];
   }, [scores, penaltyWinners, round16Matches]);
 
@@ -606,12 +456,26 @@ export default function FixtureTab({
     };
   }, [scores, penaltyWinners, semiMatches]);
 
+  const thirdPlaceMatch = useMemo<Match>(() => {
+    return {
+      id: 16,
+      player1: getLoser(13),
+      player2: getLoser(14),
+    };
+  }, [scores, penaltyWinners, semiMatches]);
+
+  /* =========================================================
+     EDIT MATCH
+  ========================================================= */
+
   function startEditing(match: Match) {
+    if (prizeCredited) {
+      alert("Prizes already credited. Match editing is locked.");
+      return;
+    }
+
     const savedScore = scores[String(match.id)];
-
     const savedPlayers = matchPlayers[String(match.id)];
-
-    const penaltyWinner = penaltyWinners[String(match.id)];
 
     setEditingMatchId(match.id);
 
@@ -624,14 +488,18 @@ export default function FixtureTab({
     );
 
     setEditPlayer1(
-      savedPlayers?.player1Id || match.player1?.id || "",
+      match.id === 16
+        ? match.player1?.id || ""
+        : savedPlayers?.player1Id || match.player1?.id || "",
     );
 
     setEditPlayer2(
-      savedPlayers?.player2Id || match.player2?.id || "",
+      match.id === 16
+        ? match.player2?.id || ""
+        : savedPlayers?.player2Id || match.player2?.id || "",
     );
 
-    setEditPenaltyWinner(penaltyWinner || "");
+    setEditPenaltyWinner(penaltyWinners[String(match.id)] || "");
   }
 
   function cancelEditing() {
@@ -643,7 +511,16 @@ export default function FixtureTab({
     setEditPenaltyWinner("");
   }
 
-    async function saveMatch(matchId: number) {
+  /* =========================================================
+     SAVE MATCH
+  ========================================================= */
+
+  async function saveMatch(matchId: number) {
+    if (prizeCredited) {
+      alert("Prizes already credited. Match editing is locked.");
+      return;
+    }
+
     if (!editPlayer1 || !editPlayer2) {
       alert("Please select both players.");
       return;
@@ -654,10 +531,26 @@ export default function FixtureTab({
       return;
     }
 
+    if (matchId === 16) {
+      if (
+        !thirdPlaceMatch.player1 ||
+        !thirdPlaceMatch.player2 ||
+        thirdPlaceMatch.player1.id !== editPlayer1 ||
+        thirdPlaceMatch.player2.id !== editPlayer2
+      ) {
+        alert(
+          "3rd Place Match players must be the losers of Match 13 and Match 14.",
+        );
+        return;
+      }
+    }
+
     const p1Score = Number(editP1Score);
     const p2Score = Number(editP2Score);
 
     if (
+      editP1Score === "" ||
+      editP2Score === "" ||
       !Number.isInteger(p1Score) ||
       p1Score < 0 ||
       !Number.isInteger(p2Score) ||
@@ -690,247 +583,726 @@ export default function FixtureTab({
         tournament.id,
       );
 
-      // FixtureTab.tsx-il saveMatch function nte ullile runTransaction block mathram update cheyyanam:
+      const result = await runTransaction(db, async (transaction) => {
+        const tournamentSnap = await transaction.get(tournamentRef);
 
-const result = await runTransaction(
-  db,
-  async (transaction) => {
-    const tournamentSnap = await transaction.get(tournamentRef);
+        if (!tournamentSnap.exists()) {
+          throw new Error("Tournament not found.");
+        }
 
-    if (!tournamentSnap.exists()) {
-      throw new Error("Tournament not found.");
-    }
+        const tournamentData = tournamentSnap.data();
 
-    const tournamentData = tournamentSnap.data();
+        if (tournamentData.prizeCredited === true) {
+          throw new Error(
+            "Prizes already credited. Match editing is locked.",
+          );
+        }
 
-    const oldScores: Record<string, SavedScore> = tournamentData.scores || {};
-    const oldMatchPlayers: Record<string, SavedMatchPlayers> = tournamentData.matchPlayers || {};
-    const oldPenaltyWinners: Record<string, string> = tournamentData.penaltyWinners || {};
-    
-    // Tournament-il aarellam aadyamaayi match complete aaki ennu nokkanulla track map
-    const playedUsersMap: Record<string, boolean> = tournamentData.playedUsersMap || {};
+        const oldScores: Record<string, SavedScore> =
+          tournamentData.scores || {};
 
-    const newScores: Record<string, SavedScore> = {
-      ...oldScores,
-      [String(matchId)]: { p1Score, p2Score },
-    };
+        const oldMatchPlayers: Record<string, SavedMatchPlayers> =
+          tournamentData.matchPlayers || {};
 
-    const newMatchPlayers: Record<string, SavedMatchPlayers> = {
-      ...oldMatchPlayers,
-      [String(matchId)]: { player1Id: editPlayer1, player2Id: editPlayer2 },
-    };
+        const oldPenaltyWinners: Record<string, string> =
+          tournamentData.penaltyWinners || {};
 
-    const newPenaltyWinners: Record<string, string> = { ...oldPenaltyWinners };
+        const playedUsersMap: Record<string, boolean> =
+          tournamentData.playedUsersMap || {};
 
-    if (p1Score === p2Score) {
-      newPenaltyWinners[String(matchId)] = editPenaltyWinner;
-    } else {
-      delete newPenaltyWinners[String(matchId)];
-    }
+        const newScores = {
+          ...oldScores,
+          [String(matchId)]: { p1Score, p2Score },
+        };
 
-    // Single match level stats differences calculate cheyyan
-    const newPlayedUsersMap = { ...playedUsersMap };
+        const newMatchPlayers = {
+          ...oldMatchPlayers,
+          [String(matchId)]: {
+            player1Id: editPlayer1,
+            player2Id: editPlayer2,
+          },
+        };
 
-    // Player 1 & Player 2 aadyamayaano ee tournament-il match finish aakkunnedh ennu check cheyyunnu
-    let p1TournamentPlayedDelta = 0;
-    let p2TournamentPlayedDelta = 0;
+        const newPenaltyWinners = { ...oldPenaltyWinners };
 
-    if (!newPlayedUsersMap[editPlayer1]) {
-      newPlayedUsersMap[editPlayer1] = true;
-      p1TournamentPlayedDelta = 1;
-    }
+        if (p1Score === p2Score) {
+          newPenaltyWinners[String(matchId)] = editPenaltyWinner;
+        } else {
+          delete newPenaltyWinners[String(matchId)];
+        }
 
-    if (!newPlayedUsersMap[editPlayer2]) {
-      newPlayedUsersMap[editPlayer2] = true;
-      p2TournamentPlayedDelta = 1;
-    }
+        const newPlayedUsersMap = { ...playedUsersMap };
 
-    /* -------------------------------------------------------------- */
-    /* FINAL MATCH WINNER & RUNNER CALCULATION                       */
-    /* -------------------------------------------------------------- */
-    let winnerId = "";
-    let runnerId = "";
+        let p1TournamentPlayedDelta = 0;
+        let p2TournamentPlayedDelta = 0;
 
-    if (String(matchId) === "15") {
-      if (p1Score > p2Score) {
-        winnerId = editPlayer1;
-        runnerId = editPlayer2;
-      } else if (p2Score > p1Score) {
-        winnerId = editPlayer2;
-        runnerId = editPlayer1;
-      } else if (editPenaltyWinner) {
-        winnerId = editPenaltyWinner;
-        runnerId = editPenaltyWinner === editPlayer1 ? editPlayer2 : editPlayer1;
-      }
-    }
+        if (!newPlayedUsersMap[editPlayer1]) {
+          newPlayedUsersMap[editPlayer1] = true;
+          p1TournamentPlayedDelta = 1;
+        }
 
-    /* -------------------------------------------------------------- */
-    /* AFFECTED USERS & READ USER DOCUMENTS                           */
-    /* -------------------------------------------------------------- */
-    const affectedUserIds = new Set<string>([editPlayer1, editPlayer2]);
+        if (!newPlayedUsersMap[editPlayer2]) {
+          newPlayedUsersMap[editPlayer2] = true;
+          p2TournamentPlayedDelta = 1;
+        }
 
-    const userSnapshots = [];
-    for (const userId of affectedUserIds) {
-      const userRef = doc(db, "users", userId);
-      const userSnap = await transaction.get(userRef);
-      userSnapshots.push({ userId, userRef, userSnap });
-    }
+        let winnerId = "";
+        let runnerId = "";
 
-    /* -------------------------------------------------------------- */
-    /* UPDATE TOURNAMENT DATA IN FIRESTORE                           */
-    /* -------------------------------------------------------------- */
-    const tournamentUpdateData: Record<string, unknown> = {
-      [`scores.${matchId}`]: { p1Score, p2Score },
-      [`matchPlayers.${matchId}`]: { player1Id: editPlayer1, player2Id: editPlayer2 },
-      playedUsersMap: newPlayedUsersMap,
-      updatedAt: serverTimestamp(),
-    };
-
-    if (p1Score === p2Score) {
-      tournamentUpdateData[`penaltyWinners.${matchId}`] = editPenaltyWinner;
-    } else {
-      tournamentUpdateData[`penaltyWinners.${matchId}`] = deleteField();
-    }
-
-    if (winnerId && runnerId) {
-      tournamentUpdateData["winnerId"] = winnerId;
-      tournamentUpdateData["runnerId"] = runnerId;
-    }
-
-    transaction.update(tournamentRef, tournamentUpdateData);
-
-    /* -------------------------------------------------------------- */
-    /* UPDATE USER STATS IN FIRESTORE                                 */
-    /* -------------------------------------------------------------- */
-    for (const user of userSnapshots) {
-      const userId = user.userId;
-      const isP1 = userId === editPlayer1;
-
-      // Pazhaya match score edukkunnu (Munpu save cheythathundel, illlel 0)
-      const oldMatchScore = oldScores[String(matchId)];
-      const oldMatchPlayer = oldMatchPlayers[String(matchId)];
-      
-      let oldPScore = 0;
-      let oldOScore = 0;
-      let oldIsWin = false;
-      let oldIsLoss = false;
-
-      if (oldMatchScore && oldMatchPlayer) {
-        const isOldP1 = oldMatchPlayer.player1Id === userId;
-        const isOldP2 = oldMatchPlayer.player2Id === userId;
-        if (isOldP1 || isOldP2) {
-          oldPScore = isOldP1 ? oldMatchScore.p1Score : oldMatchScore.p2Score;
-          oldOScore = isOldP1 ? oldMatchScore.p2Score : oldMatchScore.p1Score;
-
-          if (oldPScore > oldOScore) {
-            oldIsWin = true;
-          } else if (oldOScore > oldPScore) {
-            oldIsLoss = true;
+        if (matchId === 15) {
+          if (p1Score > p2Score) {
+            winnerId = editPlayer1;
+            runnerId = editPlayer2;
+          } else if (p2Score > p1Score) {
+            winnerId = editPlayer2;
+            runnerId = editPlayer1;
           } else {
-            const oldPenaltyWinner = oldPenaltyWinners[String(matchId)];
-            if (oldPenaltyWinner === userId) {
-              oldIsWin = true;
-            } else if (oldPenaltyWinner && oldPenaltyWinner !== userId) {
-              oldIsLoss = true;
-            }
+            winnerId = editPenaltyWinner;
+            runnerId =
+              editPenaltyWinner === editPlayer1
+                ? editPlayer2
+                : editPlayer1;
           }
         }
-      }
 
-      // Puthiya score
-      const pScore = isP1 ? p1Score : p2Score;
-      const oScore = isP1 ? p2Score : p1Score;
+        const affectedUserIds = new Set([
+          editPlayer1,
+          editPlayer2,
+        ]);
 
-      let isWin = pScore > oScore;
-      let isLoss = oScore > pScore;
+        const userSnapshots = [];
 
-      if (pScore === oScore) {
-        isWin = editPenaltyWinner === userId;
-        isLoss = editPenaltyWinner !== userId && editPenaltyWinner !== "";
-      }
+        for (const userId of affectedUserIds) {
+          const userRef = doc(db, "users", userId);
+          const userSnap = await transaction.get(userRef);
 
-      // Diffs (Difference calculation for replace/update instead of adding up)
-      const goalDiff = pScore - oldPScore;
-      const concededDiff = oScore - oldOScore;
-      const winDiff = (isWin ? 1 : 0) - (oldIsWin ? 1 : 0);
-      const lossDiff = (isLoss ? 1 : 0) - (oldIsLoss ? 1 : 0);
-      // Munpulla match aayatukondu matches count +1 aayittundakum, so re-edit cheyyumpol matches count-il change varanda avashyamilla.
-      const matchDiff = (oldMatchScore && (oldMatchPlayer?.player1Id === userId || oldMatchPlayer?.player2Id === userId)) ? 0 : 1;
+          userSnapshots.push({
+            userId,
+            userRef,
+            userSnap,
+          });
+        }
 
-      const playedDelta = isP1 ? p1TournamentPlayedDelta : p2TournamentPlayedDelta;
-      const isWinnerOfTournament = userId === winnerId;
-      const isRunnerOfTournament = userId === runnerId;
+        const tournamentUpdateData: Record<string, any> = {
+          [`scores.${matchId}`]: { p1Score, p2Score },
+          [`matchPlayers.${matchId}`]: {
+            player1Id: editPlayer1,
+            player2Id: editPlayer2,
+          },
+          playedUsersMap: newPlayedUsersMap,
+          updatedAt: serverTimestamp(),
+        };
 
-      const currentData = user.userSnap.exists() ? user.userSnap.data() : {};
-      const currentStats = currentData?.tournamentStats || {};
+        if (p1Score === p2Score) {
+          tournamentUpdateData[`penaltyWinners.${matchId}`] =
+            editPenaltyWinner;
+        } else {
+          tournamentUpdateData[`penaltyWinners.${matchId}`] =
+            deleteField();
+        }
 
-      const nextStats = {
-        ...currentStats,
-        goals: Number(currentStats.goals || 0) + goalDiff,
-        conceded: Number(currentStats.conceded || 0) + concededDiff,
-        wins: Number(currentStats.wins || 0) + winDiff,
-        losses: Number(currentStats.losses || 0) + lossDiff,
-        matches: Number(currentStats.matches || 0) + matchDiff,
-        tournamentPlayed: Number(currentStats.tournamentPlayed || 0) + playedDelta,
-        tournamentWon: Number(currentStats.tournamentWon || 0) + (isWinnerOfTournament ? 1 : 0),
-        tournamentRunner:
-          Number(currentStats.tournamentRunner || 0) +
-          (isRunnerOfTournament ? 1 : 0),
-      };
+        if (matchId === 15) {
+          tournamentUpdateData.winnerId = winnerId;
+          tournamentUpdateData.runnerId = runnerId;
+        }
 
-      transaction.set(user.userRef, { tournamentStats: nextStats }, { merge: true });
-    }
+        // If a semi-final is edited, old Match 16 result becomes invalid.
+        if (matchId === 13 || matchId === 14) {
+          tournamentUpdateData["scores.16"] = deleteField();
+          tournamentUpdateData["matchPlayers.16"] = deleteField();
+          tournamentUpdateData["penaltyWinners.16"] = deleteField();
+          tournamentUpdateData.thirdPlaceId = deleteField();
+          tournamentUpdateData.fourthPlaceId = deleteField();
+        }
 
-    return {
-  newScores,
-  newMatchPlayers,
-  newPenaltyWinners,
-};
-  }
-); 
+        transaction.update(tournamentRef, tournamentUpdateData);
 
-      /* -------------------------------------------------------------- */
-      /* UPDATE LOCAL STATE                                            */
-      /* -------------------------------------------------------------- */
+        /* USER MATCH STATS */
+
+        for (const user of userSnapshots) {
+          const userId = user.userId;
+          const isP1 = userId === editPlayer1;
+
+          const oldMatchScore = oldScores[String(matchId)];
+          const oldMatchPlayer = oldMatchPlayers[String(matchId)];
+
+          let oldPScore = 0;
+          let oldOScore = 0;
+          let oldIsWin = false;
+          let oldIsLoss = false;
+
+          if (oldMatchScore && oldMatchPlayer) {
+            const isOldP1 = oldMatchPlayer.player1Id === userId;
+            const isOldP2 = oldMatchPlayer.player2Id === userId;
+
+            if (isOldP1 || isOldP2) {
+              oldPScore = isOldP1
+                ? oldMatchScore.p1Score
+                : oldMatchScore.p2Score;
+
+              oldOScore = isOldP1
+                ? oldMatchScore.p2Score
+                : oldMatchScore.p1Score;
+
+              if (oldPScore > oldOScore) {
+                oldIsWin = true;
+              } else if (oldOScore > oldPScore) {
+                oldIsLoss = true;
+              } else {
+                const oldPenalty =
+                  oldPenaltyWinners[String(matchId)];
+
+                oldIsWin = oldPenalty === userId;
+                oldIsLoss = Boolean(
+                  oldPenalty && oldPenalty !== userId,
+                );
+              }
+            }
+          }
+
+          const pScore = isP1 ? p1Score : p2Score;
+          const oScore = isP1 ? p2Score : p1Score;
+
+          let isWin = pScore > oScore;
+          let isLoss = oScore > pScore;
+
+          if (pScore === oScore) {
+            isWin = editPenaltyWinner === userId;
+            isLoss =
+              editPenaltyWinner !== userId &&
+              Boolean(editPenaltyWinner);
+          }
+
+          const goalDiff = pScore - oldPScore;
+          const concededDiff = oScore - oldOScore;
+
+          const winDiff =
+            (isWin ? 1 : 0) - (oldIsWin ? 1 : 0);
+
+          const lossDiff =
+            (isLoss ? 1 : 0) - (oldIsLoss ? 1 : 0);
+
+          const wasInOldMatch =
+            oldMatchPlayer?.player1Id === userId ||
+            oldMatchPlayer?.player2Id === userId;
+
+          const matchDiff = wasInOldMatch ? 0 : 1;
+
+          const playedDelta = isP1
+            ? p1TournamentPlayedDelta
+            : p2TournamentPlayedDelta;
+
+          const currentData = user.userSnap.exists()
+            ? user.userSnap.data()
+            : {};
+
+          const currentStats = currentData.tournamentStats || {};
+
+          const nextStats = {
+            ...emptyTournamentStats(),
+            ...currentStats,
+
+            goals:
+              Number(currentStats.goals || 0) + goalDiff,
+
+            conceded:
+              Number(currentStats.conceded || 0) +
+              concededDiff,
+
+            wins:
+              Number(currentStats.wins || 0) + winDiff,
+
+            losses:
+              Number(currentStats.losses || 0) + lossDiff,
+
+            matches:
+              Number(currentStats.matches || 0) + matchDiff,
+
+            tournamentPlayed:
+              Number(currentStats.tournamentPlayed || 0) +
+              playedDelta,
+
+            // Tournament winner/runner counters are not modified here.
+            // Prize payout and tournament result are stored separately.
+          };
+
+          transaction.set(
+            user.userRef,
+            { tournamentStats: nextStats },
+            { merge: true },
+          );
+        }
+
+        return {
+          newScores,
+          newMatchPlayers,
+          newPenaltyWinners,
+        };
+      });
 
       setScores(result.newScores);
-
-      setMatchPlayers(
-        result.newMatchPlayers,
-      );
-
-      setPenaltyWinners(
-        result.newPenaltyWinners,
-      );
+      setMatchPlayers(result.newMatchPlayers);
+      setPenaltyWinners(result.newPenaltyWinners);
 
       onTournamentUpdated?.({
         scores: result.newScores,
-
-        matchPlayers:
-          result.newMatchPlayers,
-
-        penaltyWinners:
-          result.newPenaltyWinners,
+        matchPlayers: result.newMatchPlayers,
+        penaltyWinners: result.newPenaltyWinners,
       });
 
       cancelEditing();
 
       alert(
-        "Match score and player stats updated successfully.",
+        matchId === 16
+          ? "3rd Place Match score saved successfully."
+          : "Match score saved successfully.",
       );
     } catch (error) {
-      console.error(
-        "Failed to save match and update user stats:",
-        error,
-      );
+      console.error("Failed to save match:", error);
 
       alert(
-        "Failed to save match and update user stats.",
+        error instanceof Error
+          ? error.message
+          : "Failed to save match.",
       );
     } finally {
       setSavingMatch(null);
     }
   }
+
+  /* =========================================================
+     CREDIT PRIZES
+  ========================================================= */
+
+  async function creditPrizes() {
+    if (prizeCredited) {
+      alert("Prizes have already been credited.");
+      return;
+    }
+
+    const finalScore = scores["15"];
+    const thirdScore = scores["16"];
+
+    if (!finalScore) {
+      alert("Please complete the Grand Final first.");
+      return;
+    }
+
+    if (
+      hasThirdPlaceMatch &&
+      !thirdScore
+    ) {
+      alert("Please complete the 3rd Place Match first.");
+      return;
+    }
+
+    if (
+      !finalMatch.player1 ||
+      !finalMatch.player2
+    ) {
+      alert("Grand Final players are not ready.");
+      return;
+    }
+
+    if (
+      hasThirdPlaceMatch &&
+      (!thirdPlaceMatch.player1 ||
+        !thirdPlaceMatch.player2)
+    ) {
+      alert("3rd Place Match players are not ready.");
+      return;
+    }
+
+    const finalWinner = getWinner(15);
+    const finalLoser =
+      finalWinner?.id === finalMatch.player1.id
+        ? finalMatch.player2
+        : finalMatch.player1;
+
+    if (!finalWinner || !finalLoser) {
+      alert("Grand Final winner could not be determined.");
+      return;
+    }
+
+    let thirdWinner: Player | null = null;
+    let fourthPlayer: Player | null = null;
+
+    if (hasThirdPlaceMatch) {
+      thirdWinner = getWinner(16);
+
+      if (!thirdWinner) {
+        alert(
+          "3rd Place Match winner could not be determined. Check the score and penalty winner.",
+        );
+        return;
+      }
+
+      fourthPlayer =
+        thirdWinner.id === thirdPlaceMatch.player1?.id
+          ? thirdPlaceMatch.player2
+          : thirdPlaceMatch.player1;
+
+      if (!fourthPlayer) {
+        alert("4th place player could not be determined.");
+        return;
+      }
+    }
+
+    const firstPrize = Number(tournament.firstPrize || 0);
+    const secondPrize = Number(tournament.secondPrize || 0);
+    const thirdPrize = Number(tournament.thirdPrize || 0);
+    const fourthPrize = Number(tournament.fourthPrize || 0);
+
+    if (
+      !Number.isFinite(firstPrize) ||
+      !Number.isFinite(secondPrize) ||
+      firstPrize < 0 ||
+      secondPrize < 0
+    ) {
+      alert("Please check the 1st and 2nd prize amounts.");
+      return;
+    }
+
+    if (
+      hasThirdPlaceMatch &&
+      (
+        !Number.isFinite(thirdPrize) ||
+        !Number.isFinite(fourthPrize) ||
+        thirdPrize < 0 ||
+        fourthPrize < 0
+      )
+    ) {
+      alert("Please check the 3rd and 4th prize amounts.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Confirm prize credit?\n\n` +
+        `1st: ${finalWinner.username} - ₹${firstPrize}\n` +
+        `2nd: ${finalLoser.username} - ₹${secondPrize}\n` +
+        (hasThirdPlaceMatch
+          ? `3rd: ${thirdWinner?.username} - ₹${thirdPrize}\n` +
+            `4th: ${fourthPlayer?.username} - ₹${fourthPrize}\n`
+          : "") +
+        `\nThis action can only be completed once.`,
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setCreditingPrizes(true);
+
+      const tournamentRef = doc(
+        db,
+        "moneyTournaments",
+        tournament.id,
+      );
+
+      await runTransaction(db, async (transaction) => {
+        const tournamentSnap = await transaction.get(
+          tournamentRef,
+        );
+
+        if (!tournamentSnap.exists()) {
+          throw new Error("Tournament not found.");
+        }
+
+        const tournamentData = tournamentSnap.data();
+
+        if (tournamentData.prizeCredited === true) {
+          throw new Error(
+            "Prizes have already been credited for this tournament.",
+          );
+        }
+
+        const storedScores = tournamentData.scores || {};
+        const storedPlayers = tournamentData.matchPlayers || {};
+        const storedPenalties = tournamentData.penaltyWinners || {};
+
+        const storedFinalScore = storedScores["15"];
+        const storedFinalPlayers = storedPlayers["15"];
+
+        if (!storedFinalScore || !storedFinalPlayers) {
+          throw new Error("Grand Final result is missing.");
+        }
+
+        // Re-check final result using Firestore's latest data.
+        const finalP1 = storedFinalPlayers.player1Id;
+        const finalP2 = storedFinalPlayers.player2Id;
+
+        let verifiedWinner = "";
+        let verifiedRunner = "";
+
+        if (
+          storedFinalScore.p1Score >
+          storedFinalScore.p2Score
+        ) {
+          verifiedWinner = finalP1;
+          verifiedRunner = finalP2;
+        } else if (
+          storedFinalScore.p2Score >
+          storedFinalScore.p1Score
+        ) {
+          verifiedWinner = finalP2;
+          verifiedRunner = finalP1;
+        } else {
+          const penaltyWinner = storedPenalties["15"];
+
+          if (
+            penaltyWinner !== finalP1 &&
+            penaltyWinner !== finalP2
+          ) {
+            throw new Error(
+              "Grand Final penalty winner is missing.",
+            );
+          }
+
+          verifiedWinner = penaltyWinner;
+          verifiedRunner =
+            penaltyWinner === finalP1 ? finalP2 : finalP1;
+        }
+
+        if (
+          verifiedWinner !== finalWinner.id ||
+          verifiedRunner !== finalLoser.id
+        ) {
+          throw new Error(
+            "Grand Final result changed. Refresh and try again.",
+          );
+        }
+
+        let verifiedThird = "";
+        let verifiedFourth = "";
+
+        if (hasThirdPlaceMatch) {
+          const semi1Players = storedPlayers["13"];
+          const semi2Players = storedPlayers["14"];
+
+          const semi1Score = storedScores["13"];
+          const semi2Score = storedScores["14"];
+
+          const semi1Penalty = storedPenalties["13"];
+          const semi2Penalty = storedPenalties["14"];
+
+          if (
+            !semi1Players ||
+            !semi2Players ||
+            !semi1Score ||
+            !semi2Score
+          ) {
+            throw new Error(
+              "Both semi-final results are required.",
+            );
+          }
+
+          function storedLoser(
+            matchPlayerData: SavedMatchPlayers,
+            score: SavedScore,
+            penaltyWinnerId?: string,
+          ) {
+            if (score.p1Score > score.p2Score) {
+              return matchPlayerData.player2Id;
+            }
+
+            if (score.p2Score > score.p1Score) {
+              return matchPlayerData.player1Id;
+            }
+
+            if (penaltyWinnerId === matchPlayerData.player1Id) {
+              return matchPlayerData.player2Id;
+            }
+
+            if (penaltyWinnerId === matchPlayerData.player2Id) {
+              return matchPlayerData.player1Id;
+            }
+
+            return "";
+          }
+
+          const expectedThirdPlayer1 = storedLoser(
+            semi1Players,
+            semi1Score,
+            semi1Penalty,
+          );
+
+          const expectedThirdPlayer2 = storedLoser(
+            semi2Players,
+            semi2Score,
+            semi2Penalty,
+          );
+
+          const storedThirdPlayers = storedPlayers["16"];
+          const storedThirdScore = storedScores["16"];
+
+          if (!storedThirdPlayers || !storedThirdScore) {
+            throw new Error(
+              "3rd Place Match result is missing.",
+            );
+          }
+
+          if (
+            storedThirdPlayers.player1Id !== expectedThirdPlayer1 ||
+            storedThirdPlayers.player2Id !== expectedThirdPlayer2
+          ) {
+            throw new Error(
+              "3rd Place Match players do not match the semi-final losers.",
+            );
+          }
+
+          if (
+            storedThirdPlayers.player1Id !== thirdPlaceMatch.player1?.id ||
+            storedThirdPlayers.player2Id !== thirdPlaceMatch.player2?.id
+          ) {
+            throw new Error(
+              "3rd Place Match players changed. Refresh and try again.",
+            );
+          }
+
+          if (
+            storedThirdScore.p1Score >
+            storedThirdScore.p2Score
+          ) {
+            verifiedThird = storedThirdPlayers.player1Id;
+            verifiedFourth = storedThirdPlayers.player2Id;
+          } else if (
+            storedThirdScore.p2Score >
+            storedThirdScore.p1Score
+          ) {
+            verifiedThird = storedThirdPlayers.player2Id;
+            verifiedFourth = storedThirdPlayers.player1Id;
+          } else {
+            const penaltyWinner = storedPenalties["16"];
+
+            if (
+              penaltyWinner !== storedThirdPlayers.player1Id &&
+              penaltyWinner !== storedThirdPlayers.player2Id
+            ) {
+              throw new Error(
+                "3rd Place Match penalty winner is missing.",
+              );
+            }
+
+            verifiedThird = penaltyWinner;
+            verifiedFourth =
+              penaltyWinner === storedThirdPlayers.player1Id
+                ? storedThirdPlayers.player2Id
+                : storedThirdPlayers.player1Id;
+          }
+
+          if (
+            verifiedThird !== thirdWinner?.id ||
+            verifiedFourth !== fourthPlayer?.id
+          ) {
+            throw new Error(
+              "3rd Place result changed. Refresh and try again.",
+            );
+          }
+        }
+
+        // Read all user documents before writing anything.
+        const payouts = [
+          { userId: verifiedWinner, amount: firstPrize },
+          { userId: verifiedRunner, amount: secondPrize },
+        ];
+
+        if (hasThirdPlaceMatch) {
+          payouts.push(
+            { userId: verifiedThird, amount: thirdPrize },
+            { userId: verifiedFourth, amount: fourthPrize },
+          );
+        }
+
+        const userRefs = payouts.map((payout) => ({
+          ...payout,
+          ref: doc(db, "users", payout.userId),
+        }));
+
+        const userSnapshots = [];
+
+        for (const payout of userRefs) {
+          const userSnap = await transaction.get(payout.ref);
+
+          if (!userSnap.exists()) {
+            throw new Error(
+              `User account not found: ${payout.userId}`,
+            );
+          }
+
+          userSnapshots.push({
+            ...payout,
+            userSnap,
+          });
+        }
+
+        // Credit all prize balances.
+        for (const payout of userSnapshots) {
+          const userData = payout.userSnap.data();
+
+          const currentBalance = Number(
+            userData.winningsBalance || 0,
+          );
+
+          if (!Number.isFinite(currentBalance)) {
+            throw new Error(
+              `Invalid winnings balance for ${payout.userId}`,
+            );
+          }
+
+          transaction.update(payout.ref, {
+            winningsBalance: currentBalance + payout.amount,
+          });
+        }
+
+        // Lock payout and save official tournament placements.
+        transaction.update(tournamentRef, {
+          prizeCredited: true,
+          prizeCreditedAt: serverTimestamp(),
+
+          winnerId: verifiedWinner,
+          runnerId: verifiedRunner,
+
+          ...(hasThirdPlaceMatch
+            ? {
+                thirdPlaceId: verifiedThird,
+                fourthPlaceId: verifiedFourth,
+              }
+            : {}),
+
+          updatedAt: serverTimestamp(),
+        });
+      });
+
+      setPrizeCredited(true);
+
+      onTournamentUpdated?.({
+        prizeCredited: true,
+        winnerId: finalWinner.id,
+        runnerId: finalLoser.id,
+        ...(hasThirdPlaceMatch
+          ? {
+              thirdPlaceId: thirdWinner?.id,
+              fourthPlaceId: fourthPlayer?.id,
+            }
+          : {}),
+      });
+
+      alert("All tournament prizes credited successfully!");
+    } catch (error) {
+      console.error("Prize credit failed:", error);
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to credit prizes.",
+      );
+    } finally {
+      setCreditingPrizes(false);
+    }
+  }
+
+  /* =========================================================
+     SEMI FINAL ROOM CODE
+  ========================================================= */
 
   async function saveSemiFinalRoomCode() {
     try {
@@ -955,12 +1327,14 @@ const result = await runTransaction(
     }
   }
 
+  /* =========================================================
+     UI
+  ========================================================= */
+
   const allPlayersForEdit = players;
 
   return (
     <div className="w-full">
-      {/* ROUND NAVIGATION */}
-
       <div className="sticky top-0 z-20 border-b border-[#e5e7eb] bg-white">
         <div className="flex overflow-x-auto">
           <RoundTab
@@ -1007,35 +1381,24 @@ const result = await runTransaction(
                     key={match.id}
                     match={match}
                     score={scores[String(match.id)]}
-                    penaltyWinnerId={
-                      penaltyWinners[String(match.id)]
-                    }
-                    editing={
-                      editingMatchId === match.id
-                    }
-                    saving={
-                      savingMatch === match.id
-                    }
+                    penaltyWinnerId={penaltyWinners[String(match.id)]}
+                    editing={editingMatchId === match.id}
+                    saving={savingMatch === match.id}
+                    locked={prizeCredited}
                     players={allPlayersForEdit}
                     editPlayer1={editPlayer1}
                     editPlayer2={editPlayer2}
                     editP1Score={editP1Score}
                     editP2Score={editP2Score}
-                    editPenaltyWinner={
-                      editPenaltyWinner
-                    }
+                    editPenaltyWinner={editPenaltyWinner}
                     onEdit={() => startEditing(match)}
                     onCancel={cancelEditing}
-                    onSave={() =>
-                      saveMatch(match.id)
-                    }
+                    onSave={() => saveMatch(match.id)}
                     onPlayer1Change={setEditPlayer1}
                     onPlayer2Change={setEditPlayer2}
                     onP1ScoreChange={setEditP1Score}
                     onP2ScoreChange={setEditP2Score}
-                    onPenaltyWinnerChange={
-                      setEditPenaltyWinner
-                    }
+                    onPenaltyWinnerChange={setEditPenaltyWinner}
                   />
                 ))}
               </div>
@@ -1072,35 +1435,24 @@ const result = await runTransaction(
                     key={match.id}
                     match={match}
                     score={scores[String(match.id)]}
-                    penaltyWinnerId={
-                      penaltyWinners[String(match.id)]
-                    }
-                    editing={
-                      editingMatchId === match.id
-                    }
-                    saving={
-                      savingMatch === match.id
-                    }
+                    penaltyWinnerId={penaltyWinners[String(match.id)]}
+                    editing={editingMatchId === match.id}
+                    saving={savingMatch === match.id}
+                    locked={prizeCredited}
                     players={allPlayersForEdit}
                     editPlayer1={editPlayer1}
                     editPlayer2={editPlayer2}
                     editP1Score={editP1Score}
                     editP2Score={editP2Score}
-                    editPenaltyWinner={
-                      editPenaltyWinner
-                    }
+                    editPenaltyWinner={editPenaltyWinner}
                     onEdit={() => startEditing(match)}
                     onCancel={cancelEditing}
-                    onSave={() =>
-                      saveMatch(match.id)
-                    }
+                    onSave={() => saveMatch(match.id)}
                     onPlayer1Change={setEditPlayer1}
                     onPlayer2Change={setEditPlayer2}
                     onP1ScoreChange={setEditP1Score}
                     onP2ScoreChange={setEditP2Score}
-                    onPenaltyWinnerChange={
-                      setEditPenaltyWinner
-                    }
+                    onPenaltyWinnerChange={setEditPenaltyWinner}
                   />
                 ))}
               </div>
@@ -1127,8 +1479,6 @@ const result = await runTransaction(
 
       {activeRound === "semi" && (
         <div className="bg-[#f3f4f6] p-4">
-          {/* ROOM CODE */}
-
           <div className="mb-5 rounded-2xl bg-white p-4 shadow-sm">
             <div className="mb-2 text-[11px] font-black uppercase tracking-[0.08em] text-[#777]">
               Semi Final Room Code
@@ -1137,9 +1487,7 @@ const result = await runTransaction(
             <div className="flex gap-2">
               <input
                 value={semiRoomCode}
-                onChange={(e) =>
-                  setSemiRoomCode(e.target.value)
-                }
+                onChange={(e) => setSemiRoomCode(e.target.value)}
                 placeholder="Enter room code"
                 className="min-w-0 flex-1 rounded-xl border border-[#d8d8d8] bg-[#fafafa] px-3 py-3 text-sm font-bold outline-none focus:border-[#18a957]"
               />
@@ -1161,81 +1509,172 @@ const result = await runTransaction(
                 key={match.id}
                 match={match}
                 score={scores[String(match.id)]}
-                penaltyWinnerId={
-                  penaltyWinners[String(match.id)]
-                }
-                editing={
-                  editingMatchId === match.id
-                }
-                saving={
-                  savingMatch === match.id
-                }
+                penaltyWinnerId={penaltyWinners[String(match.id)]}
+                editing={editingMatchId === match.id}
+                saving={savingMatch === match.id}
+                locked={prizeCredited}
                 players={allPlayersForEdit}
                 editPlayer1={editPlayer1}
                 editPlayer2={editPlayer2}
                 editP1Score={editP1Score}
                 editP2Score={editP2Score}
-                editPenaltyWinner={
-                  editPenaltyWinner
-                }
+                editPenaltyWinner={editPenaltyWinner}
                 onEdit={() => startEditing(match)}
                 onCancel={cancelEditing}
-                onSave={() =>
-                  saveMatch(match.id)
-                }
+                onSave={() => saveMatch(match.id)}
                 onPlayer1Change={setEditPlayer1}
                 onPlayer2Change={setEditPlayer2}
                 onP1ScoreChange={setEditP1Score}
                 onP2ScoreChange={setEditP2Score}
-                onPenaltyWinnerChange={
-                  setEditPenaltyWinner
-                }
+                onPenaltyWinnerChange={setEditPenaltyWinner}
               />
             ))}
           </div>
         </div>
       )}
 
-      {/* FINAL */}
+      {/* FINAL AND THIRD PLACE */}
 
       {activeRound === "final" && (
-        <div className="bg-[#f3f4f6] p-4">
-          <SectionTitle title="Grand Final" />
+        <div className="space-y-8 bg-[#f3f4f6] p-4">
+          {prizeCredited && (
+            <div className="rounded-2xl border border-[#a7e5bd] bg-[#e9f8ef] p-4 text-center">
+              <div className="text-sm font-black text-[#168747]">
+                PRIZES SUCCESSFULLY CREDITED
+              </div>
+              <div className="mt-1 text-[10px] font-bold text-[#38865a]">
+                All prize balances have been updated. Match editing is locked.
+              </div>
+            </div>
+          )}
 
-          <div className="mt-5">
-            <FinalAdminMatchCard
-              match={finalMatch}
-              score={scores["15"]}
-              penaltyWinnerId={penaltyWinners["15"]}
-              editing={editingMatchId === 15}
-              saving={savingMatch === 15}
-              players={allPlayersForEdit}
-              editPlayer1={editPlayer1}
-              editPlayer2={editPlayer2}
-              editP1Score={editP1Score}
-              editP2Score={editP2Score}
-              editPenaltyWinner={editPenaltyWinner}
-              onEdit={() => startEditing(finalMatch)}
-              onCancel={cancelEditing}
-              onSave={() => saveMatch(15)}
-              onPlayer1Change={setEditPlayer1}
-              onPlayer2Change={setEditPlayer2}
-              onP1ScoreChange={setEditP1Score}
-              onP2ScoreChange={setEditP2Score}
-              onPenaltyWinnerChange={
-                setEditPenaltyWinner
-              }
-            />
+          {/* GRAND FINAL */}
+
+          <div>
+            <SectionTitle title="Grand Final" />
+
+            <div className="mt-5">
+              <FinalAdminMatchCard
+                match={finalMatch}
+                score={scores["15"]}
+                penaltyWinnerId={penaltyWinners["15"]}
+                editing={editingMatchId === 15}
+                saving={savingMatch === 15}
+                locked={prizeCredited}
+                players={allPlayersForEdit}
+                editPlayer1={editPlayer1}
+                editPlayer2={editPlayer2}
+                editP1Score={editP1Score}
+                editP2Score={editP2Score}
+                editPenaltyWinner={editPenaltyWinner}
+                onEdit={() => startEditing(finalMatch)}
+                onCancel={cancelEditing}
+                onSave={() => saveMatch(15)}
+                onPlayer1Change={setEditPlayer1}
+                onPlayer2Change={setEditPlayer2}
+                onP1ScoreChange={setEditP1Score}
+                onP2ScoreChange={setEditP2Score}
+                onPenaltyWinnerChange={setEditPenaltyWinner}
+              />
+            </div>
           </div>
+
+          {/* THIRD PLACE */}
+
+          {hasThirdPlaceMatch && (
+            <div>
+              <div className="mb-4 flex items-center justify-between">
+                <SectionTitle title="3rd Place Match" />
+
+                <span className="rounded-full bg-[#fff1cc] px-3 py-1 text-[9px] font-black text-[#9a6700]">
+                  MATCH 16
+                </span>
+              </div>
+
+              <ThirdPlaceAdminMatchCard
+                match={thirdPlaceMatch}
+                score={scores["16"]}
+                penaltyWinnerId={penaltyWinners["16"]}
+                editing={editingMatchId === 16}
+                saving={savingMatch === 16}
+                locked={prizeCredited}
+                players={allPlayersForEdit}
+                editPlayer1={editPlayer1}
+                editPlayer2={editPlayer2}
+                editP1Score={editP1Score}
+                editP2Score={editP2Score}
+                editPenaltyWinner={editPenaltyWinner}
+                onEdit={() => startEditing(thirdPlaceMatch)}
+                onCancel={cancelEditing}
+                onSave={() => saveMatch(16)}
+                onPlayer1Change={setEditPlayer1}
+                onPlayer2Change={setEditPlayer2}
+                onP1ScoreChange={setEditP1Score}
+                onP2ScoreChange={setEditP2Score}
+                onPenaltyWinnerChange={setEditPenaltyWinner}
+              />
+            </div>
+          )}
+
+          {/* PRIZE PREVIEW */}
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="mb-3 text-xs font-black uppercase text-[#555]">
+              Prize Distribution
+            </div>
+
+            <div className="space-y-2 text-sm font-bold text-[#333]">
+              <PrizeRow label="1st Place" amount={tournament.firstPrize} />
+              <PrizeRow label="2nd Place" amount={tournament.secondPrize} />
+
+              {hasThirdPlaceMatch && (
+                <>
+                  <PrizeRow
+                    label="3rd Place"
+                    amount={tournament.thirdPrize}
+                  />
+                  <PrizeRow
+                    label="4th Place"
+                    amount={tournament.fourthPrize}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* CREDIT BUTTON */}
+
+          <button
+            type="button"
+            onClick={creditPrizes}
+            disabled={prizeCredited || creditingPrizes}
+            className={`w-full rounded-2xl py-4 text-sm font-black text-white shadow-md ${
+              prizeCredited
+                ? "cursor-not-allowed bg-[#888]"
+                : "bg-[#18a957] hover:bg-[#138c47]"
+            }`}
+          >
+            {prizeCredited
+              ? "PRIZES ALREADY CREDITED"
+              : creditingPrizes
+                ? "CREDITING PRIZES..."
+                : "CREDIT PRIZES"}
+          </button>
+
+          {!prizeCredited && (
+            <p className="text-center text-[10px] font-bold text-[#888]">
+              Make sure all required match results and prize amounts are correct before crediting.
+            </p>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* ROUND TAB                                                                  */
-/* -------------------------------------------------------------------------- */
+/* =========================================================
+   ROUND TAB
+========================================================= */
 
 function RoundTab({
   active,
@@ -1261,9 +1700,9 @@ function RoundTab({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* SECTION TITLE                                                              */
-/* -------------------------------------------------------------------------- */
+/* =========================================================
+   SECTION TITLE
+========================================================= */
 
 function SectionTitle({ title }: { title: string }) {
   return (
@@ -1273,60 +1712,55 @@ function SectionTitle({ title }: { title: string }) {
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* ADMIN MATCH CARD                                                           */
-/* -------------------------------------------------------------------------- */
+/* =========================================================
+   PRIZE ROW
+========================================================= */
 
-function AdminMatchCard({
-  match,
-  score,
-  penaltyWinnerId,
-  editing,
-  saving,
-  players,
-  editPlayer1,
-  editPlayer2,
-  editP1Score,
-  editP2Score,
-  editPenaltyWinner,
-  onEdit,
-  onCancel,
-  onSave,
-  onPlayer1Change,
-  onPlayer2Change,
-  onP1ScoreChange,
-  onP2ScoreChange,
-  onPenaltyWinnerChange,
+function PrizeRow({
+  label,
+  amount,
 }: {
-  match: Match;
-  score?: SavedScore;
-  penaltyWinnerId?: string;
-
-  editing: boolean;
-  saving: boolean;
-
-  players: Player[];
-
-  editPlayer1: string;
-  editPlayer2: string;
-
-  editP1Score: string;
-  editP2Score: string;
-
-  editPenaltyWinner: string;
-
-  onEdit: () => void;
-  onCancel: () => void;
-  onSave: () => void;
-
-  onPlayer1Change: (value: string) => void;
-  onPlayer2Change: (value: string) => void;
-
-  onP1ScoreChange: (value: string) => void;
-  onP2ScoreChange: (value: string) => void;
-
-  onPenaltyWinnerChange: (value: string) => void;
+  label: string;
+  amount?: number;
 }) {
+  return (
+    <div className="flex items-center justify-between border-b border-[#eee] py-2 last:border-0">
+      <span>{label}</span>
+      <span className="text-[#18a957]">
+        ₹{Number(amount || 0)}
+      </span>
+    </div>
+  );
+}
+
+/* =========================================================
+   ADMIN MATCH CARD
+========================================================= */
+
+function AdminMatchCard(props: any) {
+  const {
+    match,
+    score,
+    penaltyWinnerId,
+    editing,
+    saving,
+    locked,
+    players,
+    editPlayer1,
+    editPlayer2,
+    editP1Score,
+    editP2Score,
+    editPenaltyWinner,
+    onEdit,
+    onCancel,
+    onSave,
+    onPlayer1Change,
+    onPlayer2Change,
+    onP1ScoreChange,
+    onP2ScoreChange,
+    onPenaltyWinnerChange,
+  } = props;
+
   if (editing) {
     return (
       <div className="rounded-2xl border border-[#18a957] bg-white p-4 shadow-sm">
@@ -1352,9 +1786,7 @@ function AdminMatchCard({
             type="number"
             min="0"
             value={editP1Score}
-            onChange={(e) =>
-              onP1ScoreChange(e.target.value)
-            }
+            onChange={(e) => onP1ScoreChange(e.target.value)}
             placeholder="Player 1 score"
             className="w-full rounded-xl border border-[#ddd] px-3 py-3 text-sm font-bold outline-none focus:border-[#18a957]"
           />
@@ -1372,9 +1804,7 @@ function AdminMatchCard({
             type="number"
             min="0"
             value={editP2Score}
-            onChange={(e) =>
-              onP2ScoreChange(e.target.value)
-            }
+            onChange={(e) => onP2ScoreChange(e.target.value)}
             placeholder="Player 2 score"
             className="w-full rounded-xl border border-[#ddd] px-3 py-3 text-sm font-bold outline-none focus:border-[#18a957]"
           />
@@ -1383,45 +1813,13 @@ function AdminMatchCard({
         {editP1Score !== "" &&
           editP2Score !== "" &&
           Number(editP1Score) === Number(editP2Score) && (
-            <div className="mb-3 rounded-xl bg-[#fff7e6] p-3">
-              <div className="mb-2 text-[10px] font-black uppercase text-[#a06a00]">
-                Penalty Winner
-              </div>
-
-              <select
-                value={editPenaltyWinner}
-                onChange={(e) =>
-                  onPenaltyWinnerChange(e.target.value)
-                }
-                className="w-full rounded-xl border border-[#e2d2a8] bg-white px-3 py-3 text-sm font-bold outline-none"
-              >
-                <option value="">
-                  Select penalty winner
-                </option>
-
-                {[
-                  editPlayer1,
-                  editPlayer2,
-                ]
-                  .map((id) =>
-                    players.find(
-                      (player) => player.id === id,
-                    ),
-                  )
-                  .filter(
-                    (player): player is Player =>
-                      Boolean(player),
-                  )
-                  .map((player) => (
-                    <option
-                      key={player.id}
-                      value={player.id}
-                    >
-                      {player.username}
-                    </option>
-                  ))}
-              </select>
-            </div>
+            <PenaltyWinnerSelect
+              players={players}
+              player1Id={editPlayer1}
+              player2Id={editPlayer2}
+              value={editPenaltyWinner}
+              onChange={onPenaltyWinnerChange}
+            />
           )}
 
         <div className="flex gap-2">
@@ -1456,7 +1854,8 @@ function AdminMatchCard({
         <button
           type="button"
           onClick={onEdit}
-          className="rounded-lg bg-[#eef9f2] px-3 py-1.5 text-[10px] font-black text-[#18a957]"
+          disabled={locked}
+          className="rounded-lg bg-[#eef9f2] px-3 py-1.5 text-[10px] font-black text-[#18a957] disabled:opacity-40"
         >
           EDIT
         </button>
@@ -1465,19 +1864,12 @@ function AdminMatchCard({
       <PlayerScoreRow
         player={match.player1}
         score={score?.p1Score}
-        winner={
-          Boolean(
-            score &&
-              match.player1 &&
-              (
-                score.p1Score > score.p2Score ||
-                (
-                  score.p1Score === score.p2Score &&
-                  penaltyWinnerId === match.player1.id
-                )
-              ),
-          )
-        }
+        winner={isMatchWinner(
+          match.player1,
+          match.player2,
+          score,
+          penaltyWinnerId,
+        )}
       />
 
       <div className="my-2 border-t border-dashed border-[#e5e5e5]" />
@@ -1485,19 +1877,17 @@ function AdminMatchCard({
       <PlayerScoreRow
         player={match.player2}
         score={score?.p2Score}
-        winner={
-          Boolean(
-            score &&
-              match.player2 &&
-              (
-                score.p2Score > score.p1Score ||
-                (
-                  score.p1Score === score.p2Score &&
-                  penaltyWinnerId === match.player2.id
-                )
-              ),
-          )
-        }
+        winner={isMatchWinner(
+          match.player2,
+          match.player1,
+          score
+            ? {
+                p1Score: score.p2Score,
+                p2Score: score.p1Score,
+              }
+            : undefined,
+          penaltyWinnerId,
+        )}
       />
 
       {score &&
@@ -1511,55 +1901,15 @@ function AdminMatchCard({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* LARGE ADMIN MATCH CARD                                                     */
-/* -------------------------------------------------------------------------- */
+/* =========================================================
+   LARGE ADMIN MATCH CARD
+========================================================= */
 
-function LargeAdminMatchCard({
-  match,
-  score,
-  penaltyWinnerId,
-  editing,
-  saving,
-  players,
-  editPlayer1,
-  editPlayer2,
-  editP1Score,
-  editP2Score,
-  editPenaltyWinner,
-  onEdit,
-  onCancel,
-  onSave,
-  onPlayer1Change,
-  onPlayer2Change,
-  onP1ScoreChange,
-  onP2ScoreChange,
-  onPenaltyWinnerChange,
-}: any) {
+function LargeAdminMatchCard(props: any) {
+  const { match, score, editing, locked, onEdit } = props;
+
   if (editing) {
-    return (
-      <AdminMatchCard
-        match={match}
-        score={score}
-        penaltyWinnerId={penaltyWinnerId}
-        editing={editing}
-        saving={saving}
-        players={players}
-        editPlayer1={editPlayer1}
-        editPlayer2={editPlayer2}
-        editP1Score={editP1Score}
-        editP2Score={editP2Score}
-        editPenaltyWinner={editPenaltyWinner}
-        onEdit={onEdit}
-        onCancel={onCancel}
-        onSave={onSave}
-        onPlayer1Change={onPlayer1Change}
-        onPlayer2Change={onPlayer2Change}
-        onP1ScoreChange={onP1ScoreChange}
-        onP2ScoreChange={onP2ScoreChange}
-        onPenaltyWinnerChange={onPenaltyWinnerChange}
-      />
-    );
+    return <AdminMatchCard {...props} />;
   }
 
   return (
@@ -1578,7 +1928,8 @@ function LargeAdminMatchCard({
         <button
           type="button"
           onClick={onEdit}
-          className="rounded-lg bg-white px-3 py-2 text-[10px] font-black text-[#26384b]"
+          disabled={locked}
+          className="rounded-lg bg-white px-3 py-2 text-[10px] font-black text-[#26384b] disabled:opacity-40"
         >
           EDIT
         </button>
@@ -1588,19 +1939,12 @@ function LargeAdminMatchCard({
         <LargePlayerRow
           player={match.player1}
           score={score?.p1Score}
-          winner={
-            Boolean(
-              score &&
-                match.player1 &&
-                (
-                  score.p1Score > score.p2Score ||
-                  (
-                    score.p1Score === score.p2Score &&
-                    penaltyWinnerId === match.player1.id
-                  )
-                ),
-            )
-          }
+          winner={isMatchWinner(
+            match.player1,
+            match.player2,
+            score,
+            props.penaltyWinnerId,
+          )}
         />
 
         <div className="h-px bg-white/15" />
@@ -1608,74 +1952,38 @@ function LargeAdminMatchCard({
         <LargePlayerRow
           player={match.player2}
           score={score?.p2Score}
-          winner={
-            Boolean(
-              score &&
-                match.player2 &&
-                (
-                  score.p2Score > score.p1Score ||
-                  (
-                    score.p1Score === score.p2Score &&
-                    penaltyWinnerId === match.player2.id
-                  )
-                ),
-            )
-          }
+          winner={isMatchWinner(
+            match.player2,
+            match.player1,
+            score
+              ? {
+                  p1Score: score.p2Score,
+                  p2Score: score.p1Score,
+                }
+              : undefined,
+            props.penaltyWinnerId,
+          )}
         />
       </div>
     </div>
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* FINAL ADMIN CARD                                                           */
-/* -------------------------------------------------------------------------- */
+/* =========================================================
+   GRAND FINAL CARD
+========================================================= */
 
-function FinalAdminMatchCard({
-  match,
-  score,
-  penaltyWinnerId,
-  editing,
-  saving,
-  players,
-  editPlayer1,
-  editPlayer2,
-  editP1Score,
-  editP2Score,
-  editPenaltyWinner,
-  onEdit,
-  onCancel,
-  onSave,
-  onPlayer1Change,
-  onPlayer2Change,
-  onP1ScoreChange,
-  onP2ScoreChange,
-  onPenaltyWinnerChange,
-}: any) {
+function FinalAdminMatchCard(props: any) {
+  const {
+    match,
+    score,
+    editing,
+    locked,
+    onEdit,
+  } = props;
+
   if (editing) {
-    return (
-      <AdminMatchCard
-        match={match}
-        score={score}
-        penaltyWinnerId={penaltyWinnerId}
-        editing={editing}
-        saving={saving}
-        players={players}
-        editPlayer1={editPlayer1}
-        editPlayer2={editPlayer2}
-        editP1Score={editP1Score}
-        editP2Score={editP2Score}
-        editPenaltyWinner={editPenaltyWinner}
-        onEdit={onEdit}
-        onCancel={onCancel}
-        onSave={onSave}
-        onPlayer1Change={onPlayer1Change}
-        onPlayer2Change={onPlayer2Change}
-        onP1ScoreChange={onP1ScoreChange}
-        onP2ScoreChange={onP2ScoreChange}
-        onPenaltyWinnerChange={onPenaltyWinnerChange}
-      />
-    );
+    return <AdminMatchCard {...props} />;
   }
 
   return (
@@ -1697,19 +2005,12 @@ function FinalAdminMatchCard({
       <PlayerScoreRow
         player={match.player1}
         score={score?.p1Score}
-        winner={
-          Boolean(
-            score &&
-              match.player1 &&
-              (
-                score.p1Score > score.p2Score ||
-                (
-                  score.p1Score === score.p2Score &&
-                  penaltyWinnerId === match.player1.id
-                )
-              ),
-          )
-        }
+        winner={isMatchWinner(
+          match.player1,
+          match.player2,
+          score,
+          props.penaltyWinnerId,
+        )}
       />
 
       <div className="my-4 border-t border-dashed border-[#ddd]" />
@@ -1717,25 +2018,24 @@ function FinalAdminMatchCard({
       <PlayerScoreRow
         player={match.player2}
         score={score?.p2Score}
-        winner={
-          Boolean(
-            score &&
-              match.player2 &&
-              (
-                score.p2Score > score.p1Score ||
-                (
-                  score.p1Score === score.p2Score &&
-                  penaltyWinnerId === match.player2.id
-                )
-              ),
-          )
-        }
+        winner={isMatchWinner(
+          match.player2,
+          match.player1,
+          score
+            ? {
+                p1Score: score.p2Score,
+                p2Score: score.p1Score,
+              }
+            : undefined,
+          props.penaltyWinnerId,
+        )}
       />
 
       <button
         type="button"
         onClick={onEdit}
-        className="mt-5 w-full rounded-xl bg-[#18a957] py-3 text-xs font-black text-white"
+        disabled={locked}
+        className="mt-5 w-full rounded-xl bg-[#18a957] py-3 text-xs font-black text-white disabled:opacity-40"
       >
         EDIT FINAL
       </button>
@@ -1743,9 +2043,100 @@ function FinalAdminMatchCard({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* PLAYER SELECT                                                              */
-/* -------------------------------------------------------------------------- */
+/* =========================================================
+   THIRD PLACE MATCH CARD
+========================================================= */
+
+function ThirdPlaceAdminMatchCard(props: any) {
+  const {
+    match,
+    score,
+    penaltyWinnerId,
+    editing,
+    locked,
+    onEdit,
+  } = props;
+
+  if (editing) {
+    return <AdminMatchCard {...props} />;
+  }
+
+  const playersReady = Boolean(match.player1 && match.player2);
+
+  return (
+    <div className="overflow-hidden rounded-3xl border border-[#e7d39b] bg-white shadow-lg">
+      <div className="bg-gradient-to-r from-[#8c681d] to-[#c49a3a] px-5 py-4 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.12em] text-white/70">
+              3rd Place Match
+            </div>
+
+            <div className="mt-1 text-base font-black">
+              Match 16
+            </div>
+          </div>
+
+          <div className="text-2xl">🥉</div>
+        </div>
+      </div>
+
+      <div className="space-y-3 p-5">
+        <div className="rounded-xl bg-[#fff9e9] px-3 py-2 text-center text-[9px] font-black uppercase text-[#946b13]">
+          Semi-final 1 & 2 losers
+        </div>
+
+        <PlayerScoreRow
+          player={match.player1}
+          score={score?.p1Score}
+          winner={isMatchWinner(
+            match.player1,
+            match.player2,
+            score,
+            penaltyWinnerId,
+          )}
+        />
+
+        <div className="border-t border-dashed border-[#ddd]" />
+
+        <PlayerScoreRow
+          player={match.player2}
+          score={score?.p2Score}
+          winner={isMatchWinner(
+            match.player2,
+            match.player1,
+            score
+              ? {
+                  p1Score: score.p2Score,
+                  p2Score: score.p1Score,
+                }
+              : undefined,
+            penaltyWinnerId,
+          )}
+        />
+
+        {!playersReady && (
+          <div className="rounded-xl bg-[#f5f5f5] p-3 text-center text-[10px] font-bold text-[#888]">
+            Waiting for both semi-final results...
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onEdit}
+          disabled={!playersReady || locked}
+          className="w-full rounded-xl bg-[#b58a2c] py-3 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          EDIT 3RD PLACE MATCH
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   PLAYER SELECT
+========================================================= */
 
 function EditPlayerSelect({
   label,
@@ -1772,10 +2163,7 @@ function EditPlayerSelect({
         <option value="">Select player</option>
 
         {players.map((player) => (
-          <option
-            key={player.id}
-            value={player.id}
-          >
+          <option key={player.id} value={player.id}>
             {player.username}
           </option>
         ))}
@@ -1784,9 +2172,52 @@ function EditPlayerSelect({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* PREVIEW CARD                                                               */
-/* -------------------------------------------------------------------------- */
+/* =========================================================
+   PENALTY WINNER SELECT
+========================================================= */
+
+function PenaltyWinnerSelect({
+  players,
+  player1Id,
+  player2Id,
+  value,
+  onChange,
+}: {
+  players: Player[];
+  player1Id: string;
+  player2Id: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="mb-3 rounded-xl bg-[#fff7e6] p-3">
+      <div className="mb-2 text-[10px] font-black uppercase text-[#a06a00]">
+        Penalty Winner
+      </div>
+
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-xl border border-[#e2d2a8] bg-white px-3 py-3 text-sm font-bold outline-none"
+      >
+        <option value="">Select penalty winner</option>
+
+        {[player1Id, player2Id]
+          .map((id) => players.find((player) => player.id === id))
+          .filter((player): player is Player => Boolean(player))
+          .map((player) => (
+            <option key={player.id} value={player.id}>
+              {player.username}
+            </option>
+          ))}
+      </select>
+    </div>
+  );
+}
+
+/* =========================================================
+   PREVIEW CARD
+========================================================= */
 
 function PreviewMatchCard({
   match,
@@ -1801,24 +2232,36 @@ function PreviewMatchCard({
         Match {match.id}
       </div>
 
-      <PlayerScoreRow
-        player={match.player1}
-        score={score?.p1Score}
-      />
+      <PlayerScoreRow player={match.player1} score={score?.p1Score} />
 
       <div className="my-2 border-t border-[#eee]" />
 
-      <PlayerScoreRow
-        player={match.player2}
-        score={score?.p2Score}
-      />
+      <PlayerScoreRow player={match.player2} score={score?.p2Score} />
     </div>
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* PLAYER ROW                                                                 */
-/* -------------------------------------------------------------------------- */
+/* =========================================================
+   MATCH WINNER HELPER
+========================================================= */
+
+function isMatchWinner(
+  player: Player | null,
+  opponent: Player | null,
+  score?: SavedScore,
+  penaltyWinnerId?: string,
+): boolean {
+  if (!player || !opponent || !score) return false;
+
+  if (score.p1Score > score.p2Score) return true;
+  if (score.p2Score > score.p1Score) return false;
+
+  return penaltyWinnerId === player.id;
+}
+
+/* =========================================================
+   PLAYER ROW
+========================================================= */
 
 function PlayerScoreRow({
   player,
@@ -1858,9 +2301,9 @@ function PlayerScoreRow({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* LARGE PLAYER ROW                                                           */
-/* -------------------------------------------------------------------------- */
+/* =========================================================
+   LARGE PLAYER ROW
+========================================================= */
 
 function LargePlayerRow({
   player,
@@ -1898,9 +2341,9 @@ function LargePlayerRow({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* AVATAR                                                                     */
-/* -------------------------------------------------------------------------- */
+/* =========================================================
+   AVATAR
+========================================================= */
 
 function PlayerAvatar({
   player,

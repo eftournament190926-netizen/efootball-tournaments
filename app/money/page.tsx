@@ -34,6 +34,23 @@ type Tournament = {
   date: string;
   time: string;
   status: string;
+
+  // 4 PLAYER PRIZES
+  firstPrize?: number;
+  secondPrize?: number;
+};
+
+type OneVsOneMatch = {
+  id: string;
+  hostId: string;
+  hostName: string;
+  opponentId?: string | null;
+  date: string;
+  time: string;
+  entryFee: number;
+  winnerReward: number;
+  status: string;
+  adminApproved?: boolean;
 };
 
 type DateTab = {
@@ -104,19 +121,40 @@ function getTournamentImage(tournament: Tournament) {
    CATEGORY
 ================================================= */
 
-function isSixteenPlayer(tournament: Tournament) {
-  if (tournament.maxPlayers === 16) {
-    return true;
-  }
+type PlayerTab = "16" | "8" | "4" | "1v1";
 
+const ONE_V_ONE_REWARDS: Record<number, number> = {
+  10: 15,
+  20: 30,
+  30: 50,
+  40: 70,
+  50: 90,
+  100: 180,
+  150: 250,
+  200: 350,
+};
+
+const PLAYER_TABS: { key: PlayerTab; label: string }[] = [
+  { key: "16", label: "16 Players" },
+  { key: "8", label: "8 Players" },
+  { key: "4", label: "4 Players" },
+  { key: "1v1", label: "1v1 Players" },
+];
+
+function getPlayerTab(tournament: Tournament): PlayerTab | null {
   const category = String(tournament.category || "")
-    .toLowerCase()
-    .replace(/\s/g, "");
+    .toLowerCase().replace(/[\s_-]/g, "");
 
-  return (
-    category.includes("16") ||
-    category.includes("sixteen")
-  );
+  // 1v1 must be checked first so it isn't confused with another size.
+  if (category.includes("1v1") || category.includes("onevsone") ||
+      category.includes("headtohead")) return "1v1";
+
+  const max = Number(tournament.maxPlayers);
+  if (max === 16 || category.includes("16") || category.includes("sixteen")) return "16";
+  if (max === 8 || category.includes("8") || category.includes("eight")) return "8";
+  if (max === 4 || category.includes("4") || category.includes("four")) return "4";
+  if (max === 2) return "1v1";
+  return null;
 }
 
 /* =================================================
@@ -370,17 +408,84 @@ function TournamentCard({
   return (
     <div className="w-[238px] shrink-0 overflow-hidden rounded-[18px] border border-[#dedede] bg-white shadow-[0_6px_20px_rgba(0,0,0,0.08)]">
       {/* TOURNAMENT CARD BANNER */}
-<div className="relative h-[124px] overflow-hidden bg-[#111111]">
-  <img
-    src={getTournamentImage(tournament)}
-    alt={`${tournament.entryFee} Points Money Tournament`}
-    className="h-full w-full object-cover"
-  />
 
-  <div className="absolute left-3 top-3 rounded-[8px] bg-[#FFD600] px-3 py-[6px] text-[9px] font-black text-[#111111] shadow-md">
-    {maxPlayers} PLAYERS
+{maxPlayers === 4 ? (
+
+  /* CUSTOM 4 PLAYER BANNER */
+
+  <div className="relative h-[124px] overflow-hidden bg-gradient-to-br from-[#171717] via-[#292000] to-[#111111]">
+
+    {/* BACKGROUND DESIGN */}
+
+    <div className="absolute -right-8 -top-12 h-[150px] w-[150px] rounded-full border-[22px] border-[#FFD600]/10" />
+
+    <div className="absolute -bottom-16 -left-8 h-[150px] w-[150px] rounded-full border-[20px] border-white/5" />
+
+    <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent_35%,rgba(255,214,0,0.10)_50%,transparent_65%)]" />
+
+    {/* TOP LABEL */}
+
+    <div className="absolute left-3 top-3 rounded-[6px] bg-[#FFD600] px-2 py-[5px] text-[9px] font-black tracking-wider text-[#111111]">
+      4 PLAYERS
+    </div>
+
+    {/* MAIN TITLE */}
+
+    <div className="absolute bottom-3 left-4">
+
+      
+
+      <div className="mt-2 flex items-center gap-5">
+  <div>
+    <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+      1st Prize
+    </p>
+    <p className="text-[25px] font-black italic leading-none text-[#FFD600]">
+      ₹{tournament.firstPrize ?? 0}
+    </p>
+  </div>
+
+  <div className="h-9 w-px bg-white/20" />
+
+  <div>
+    <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+      2nd Prize
+    </p>
+    <p className="text-[25px] font-black italic leading-none text-white">
+      ₹{tournament.secondPrize ?? 0}
+    </p>
   </div>
 </div>
+
+    </div>
+
+    {/* DECORATIVE NUMBER */}
+
+    <div className="absolute bottom-[-19px] right-3 text-[95px] font-black italic leading-none text-[#FFD600]/10">
+      4
+    </div>
+
+  </div>
+
+) : (
+
+  /* EXISTING BANNERS FOR OTHER TOURNAMENTS */
+
+  <div className="relative h-[124px] overflow-hidden bg-[#111111]">
+
+    <img
+      src={getTournamentImage(tournament)}
+      alt={`${tournament.entryFee} Points Money Tournament`}
+      className="h-full w-full object-cover"
+    />
+
+    <div className="absolute left-3 top-3 rounded-[8px] bg-[#FFD600] px-3 py-[6px] text-[9px] font-black text-[#111111] shadow-md">
+      {maxPlayers} PLAYERS
+    </div>
+
+  </div>
+
+)}
 
       {/* DATE */}
 
@@ -591,19 +696,15 @@ function TournamentSection({
   tournaments: Tournament[];
   now: Date;
 }) {
-  const visibleTournaments =
-    useMemo(() => {
-      return tournaments.filter(
-        (tournament) =>
-          !isTournamentExpired(
-            tournament,
-            now
-          )
-      );
-    }, [
-      tournaments,
-      now,
-    ]);
+  const visibleTournaments = useMemo(() => {
+  return tournaments.filter((tournament) => {
+    const registered = Number(tournament.registeredPlayers || 0);
+    const maxPlayers = Number(tournament.maxPlayers || 0);
+
+    // Hide only when all player slots are filled
+    return maxPlayers > 0 && registered < maxPlayers;
+  });
+}, [tournaments]);
 
   const times =
     useMemo(() => {
@@ -857,6 +958,31 @@ const [convertError, setConvertError] = useState("");
       ""
   );
 
+  const [selectedPlayerTab, setSelectedPlayerTab] = useState<PlayerTab>("16");
+
+  // 1v1 CREATE MATCH
+
+const [showCreate1v1, setShowCreate1v1] = useState(false);
+
+const [oneVsOneFee, setOneVsOneFee] = useState("50");
+
+const [oneVsOneDate, setOneVsOneDate] = useState("");
+const [oneVsOneTime, setOneVsOneTime] = useState("");
+
+const [creating1v1, setCreating1v1] = useState(false);
+
+const [oneVsOneError, setOneVsOneError] = useState("");
+const [oneVsOneSuccess, setOneVsOneSuccess] = useState("");
+
+const [availableMatches, setAvailableMatches] =
+  useState<OneVsOneMatch[]>([]);
+
+const [joiningMatchId, setJoiningMatchId] =
+  useState("");
+
+const [joinMatchError, setJoinMatchError] =
+  useState("");
+
   const [now, setNow] =
     useState<Date>(
       () => new Date()
@@ -935,6 +1061,10 @@ const [convertError, setConvertError] = useState("");
                   data.cashPrize || 0
                 ),
 
+                firstPrize: Number(data.firstPrize || 0),
+
+secondPrize: Number(data.secondPrize || 0),
+
                 entryFee: Number(
                   data.entryFee || 0
                 ),
@@ -994,6 +1124,110 @@ const [convertError, setConvertError] = useState("");
     return () =>
       unsubscribe();
   }, []);
+
+ /* =========================================
+   AVAILABLE 1V1 MATCHES
+========================================= */
+
+useEffect(() => {
+  const matchesQuery = query(
+    collection(db, "oneVsOneMatches"),
+    orderBy("createdAt", "desc")
+  );
+
+  let active = true;
+
+  const unsubscribe = onSnapshot(
+    matchesQuery,
+    async (snapshot) => {
+      try {
+        const list = await Promise.all(
+          snapshot.docs.map(async (document) => {
+            const data = document.data();
+
+            if (
+              data.status !== "waiting_for_opponent" ||
+              data.adminApproved !== true
+            ) {
+              return null;
+            }
+
+            let hostName = String(data.hostName || "").trim();
+
+            // Old records may contain email instead of username.
+            if (!hostName || hostName.includes("@")) {
+              const hostId = String(data.hostId || "");
+
+              if (hostId) {
+                try {
+                  const hostSnap = await getDoc(
+                    doc(db, "users", hostId)
+                  );
+
+                  if (hostSnap.exists()) {
+                    const hostData = hostSnap.data();
+
+                    hostName = String(
+                      hostData.username || "Player"
+                    ).trim();
+                  } else {
+                    hostName = "Player";
+                  }
+                } catch (error) {
+                  console.error(
+                    "Error loading host username:",
+                    error
+                  );
+
+                  hostName = "Player";
+                }
+              } else {
+                hostName = "Player";
+              }
+            }
+
+            return {
+              id: document.id,
+              hostId: data.hostId || "",
+              hostName,
+              opponentId: data.opponentId || null,
+              date: data.date || "",
+              time: data.time || "",
+              entryFee: Number(data.entryFee || 0),
+              winnerReward: Number(data.winnerReward || 0),
+              status: data.status,
+              adminApproved: data.adminApproved,
+            } as OneVsOneMatch;
+          })
+        );
+
+        if (active) {
+          setAvailableMatches(
+            list.filter(
+              (match): match is OneVsOneMatch => match !== null
+            )
+          );
+        }
+      } catch (error) {
+        console.error(
+          "1v1 matches loading error:",
+          error
+        );
+      }
+    },
+    (error) => {
+      console.error(
+        "1v1 matches loading error:",
+        error
+      );
+    }
+  );
+
+  return () => {
+    active = false;
+    unsubscribe();
+  };
+}, []);
 
   /* =================================================
      PROFILE PHOTO
@@ -1066,54 +1300,36 @@ const [convertError, setConvertError] = useState("");
   ================================================= */
 
   const selectedDateTournaments =
-    useMemo(() => {
-      return tournaments.filter(
+  useMemo(() => {
+    return tournaments
+      .filter(
         (tournament) =>
-          tournament.date ===
-            selectedDate &&
-          tournament.status !==
-            "cancelled" &&
-          tournament.status !==
-            "completed"
-      );
-    }, [
-      tournaments,
-      selectedDate,
-    ]);
+          tournament.date === selectedDate &&
+          tournament.status !== "cancelled" &&
+          tournament.status !== "completed"
+      )
+      .sort((a, b) => {
+        return (
+          timeToMinutes(a.time) -
+          timeToMinutes(b.time)
+        );
+      });
+  }, [
+    tournaments,
+    selectedDate,
+  ]);
 
-  /* =================================================
-     16 PLAYER
-  ================================================= */
+     /* =================================================
+      SELECTED PLAYER CATEGORY
+   ================================================= */
 
-  const tournaments16 =
-    useMemo(() => {
-      return selectedDateTournaments.filter(
-        (tournament) =>
-          isSixteenPlayer(
-            tournament
-          )
-      );
-    }, [
-      selectedDateTournaments,
-    ]);
+  const selectedPlayerTournaments = useMemo(() =>
+    selectedDateTournaments.filter(
+      (tournament) => getPlayerTab(tournament) === selectedPlayerTab
+    ), [selectedDateTournaments, selectedPlayerTab]
+  );
 
-  /* =================================================
-     8 PLAYER
-  ================================================= */
-
-  const tournaments8 =
-    useMemo(() => {
-      return selectedDateTournaments.filter(
-        (tournament) =>
-          !isSixteenPlayer(
-            tournament
-          )
-      );
-    }, [
-      selectedDateTournaments,
-    ]);
-
-    const handleAddPointsRequest = async () => {
+const handleAddPointsRequest = async () => {
   setAddPointsError("");
 
   if (pointAmount < 50 || !Number.isSafeInteger(pointAmount)) {
@@ -1189,6 +1405,292 @@ const [convertError, setConvertError] = useState("");
     setAddingPoints(false);
   }
 };
+
+async function handleCreateOneVsOneMatch() {
+  setOneVsOneError("");
+  setOneVsOneSuccess("");
+
+  const user = auth.currentUser;
+
+  if (!user) {
+    setOneVsOneError("Please login to create a match.");
+    return;
+  }
+
+  const fee = Number(oneVsOneFee);
+  const reward = ONE_V_ONE_REWARDS[fee];
+
+  if (!reward) {
+    setOneVsOneError("Please select a valid entry fee.");
+    return;
+  }
+
+  if (!oneVsOneDate || !oneVsOneTime) {
+    setOneVsOneError("Please select match date and time.");
+    return;
+  }
+
+  if (pointsBalance < fee) {
+    setOneVsOneError(
+      `You need at least ${fee} points to create this match.`
+    );
+    return;
+  }
+
+  const matchDateTime = new Date(
+    `${oneVsOneDate}T${oneVsOneTime}:00`
+  );
+
+  if (
+    Number.isNaN(matchDateTime.getTime()) ||
+    matchDateTime.getTime() <= Date.now()
+  ) {
+    setOneVsOneError(
+      "Please select a future date and time."
+    );
+    return;
+  }
+
+  // Open a window during the click to reduce popup blocking.
+  const whatsappWindow = window.open("about:blank", "_blank");
+
+  try {
+    setCreating1v1(true);
+
+    const userSnap = await getDoc(
+  doc(db, "users", user.uid)
+);
+
+if (!userSnap.exists()) {
+  throw new Error("User profile not found.");
+}
+
+const userData = userSnap.data();
+
+const username = String(
+  userData.username || ""
+).trim();
+
+if (!username) {
+  throw new Error(
+    "Username not found. Please update your profile."
+  );
+}
+
+    const matchRef = await addDoc(
+      collection(db, "oneVsOneMatches"),
+      {
+        type: "1v1",
+
+        hostId: user.uid,
+hostEmail: user.email || "",
+hostName: username,
+
+        opponentId: null,
+        opponentEmail: "",
+        opponentName: "",
+
+        date: oneVsOneDate,
+        time: oneVsOneTime,
+
+        entryFee: fee,
+        winnerReward: reward,
+
+        status: "pending_admin_approval",
+        adminApproved: false,
+
+        roomCode: "",
+
+        hostScore: null,
+        opponentScore: null,
+        winnerId: null,
+
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }
+    );
+
+    const message = [
+      "TOURNEX - NEW 1v1 MATCH REQUEST",
+      "",
+      `Request ID: ${matchRef.id}`,
+      `Host: ${username}`,
+      `Date: ${oneVsOneDate}`,
+      `Time: ${oneVsOneTime}`,
+      `Entry Fee: ${fee} Points`,
+      `Winner Reward: ${reward} Points`,
+      "",
+      "Please review and approve this match.",
+    ].join("\n");
+
+    const whatsappUrl =
+      `https://wa.me/918848558182?text=${encodeURIComponent(message)}`;
+
+    if (whatsappWindow) {
+      whatsappWindow.location.assign(whatsappUrl);
+    } else {
+      window.open(whatsappUrl, "_blank");
+    }
+
+    setOneVsOneSuccess(
+      "Match request submitted! Waiting for admin approval."
+    );
+
+    setShowCreate1v1(false);
+
+    setOneVsOneDate("");
+    setOneVsOneTime("");
+    setOneVsOneFee("50");
+
+  } catch (error) {
+    console.error("1v1 match creation failed:", error);
+
+    whatsappWindow?.close();
+
+    setOneVsOneError(
+      "Could not create match request. Please try again."
+    );
+  } finally {
+    setCreating1v1(false);
+  }
+}
+
+async function handleJoinOneVsOneMatch(
+  match: OneVsOneMatch
+) {
+  setJoinMatchError("");
+
+  const user = auth.currentUser;
+
+  if (!user) {
+    setJoinMatchError("Please login to join.");
+    return;
+  }
+
+  if (user.uid === match.hostId) {
+    setJoinMatchError(
+      "You cannot join your own match."
+    );
+    return;
+  }
+
+  try {
+    setJoiningMatchId(match.id);
+
+    await runTransaction(db, async (transaction) => {
+      const matchRef = doc(
+        db,
+        "oneVsOneMatches",
+        match.id
+      );
+
+      const opponentRef = doc(
+        db,
+        "users",
+        user.uid
+      );
+
+      const hostRef = doc(
+        db,
+        "users",
+        match.hostId
+      );
+
+      const matchSnap = await transaction.get(matchRef);
+
+      if (!matchSnap.exists()) {
+        throw new Error("Match not found.");
+      }
+
+      const matchData = matchSnap.data();
+
+      if (
+        matchData.status !== "waiting_for_opponent" ||
+        matchData.adminApproved !== true ||
+        matchData.opponentId
+      ) {
+        throw new Error(
+          "This match is no longer available."
+        );
+      }
+
+      const opponentSnap =
+        await transaction.get(opponentRef);
+
+      const hostSnap =
+        await transaction.get(hostRef);
+
+      if (!opponentSnap.exists() || !hostSnap.exists()) {
+        throw new Error("Player account not found.");
+      }
+
+      const opponentData = opponentSnap.data();
+      const hostData = hostSnap.data();
+
+      const fee = Number(matchData.entryFee || 0);
+
+      const opponentBalance = Number(
+        opponentData.pointsBalance || 0
+      );
+
+      const hostBalance = Number(
+        hostData.pointsBalance || 0
+      );
+
+      if (opponentBalance < fee) {
+        throw new Error(
+          "Insufficient points in your wallet."
+        );
+      }
+
+      if (hostBalance < fee) {
+        throw new Error(
+          "Host does not have sufficient points. Contact admin."
+        );
+      }
+
+      // Deduct both players' entry fees.
+      transaction.update(hostRef, {
+        pointsBalance: hostBalance - fee,
+      });
+
+      transaction.update(opponentRef, {
+        pointsBalance: opponentBalance - fee,
+      });
+
+      // Confirm match.
+      transaction.update(matchRef, {
+        opponentId: user.uid,
+opponentEmail: user.email || "",
+opponentName: String(
+  opponentData.username || "Player"
+).trim(),
+
+        status: "matched",
+        joinedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    });
+
+    setPointsBalance((current) => current - match.entryFee);
+
+    window.alert(
+      "Match joined successfully!"
+    );
+
+  } catch (error) {
+    console.error("Join match failed:", error);
+
+    setJoinMatchError(
+      error instanceof Error
+        ? error.message
+        : "Could not join match."
+    );
+
+  } finally {
+    setJoiningMatchId("");
+  }
+}
 
 async function handleWithdrawRequest() {
   setWithdrawError("");
@@ -2187,40 +2689,481 @@ async function handleConvertWinnings() {
         </section>
 
         {/* ============================================
+            PLAYER CATEGORY TABS
+        ============================================ */}
+        <section className="border-b border-[#eeeeee] bg-white px-3 py-3">
+          <div className="scrollbar-none flex gap-2 overflow-x-auto">
+            {PLAYER_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setSelectedPlayerTab(tab.key)}
+                aria-pressed={selectedPlayerTab === tab.key}
+                className={`shrink-0 rounded-[11px] px-[20px] py-[11px] text-[10px] font-black transition ${
+                  selectedPlayerTab === tab.key
+                    ? "bg-[#FFD600] text-[#111111] shadow-[0_4px_10px_rgba(255,214,0,0.30)]"
+                    : "bg-[#f2f2f2] text-[#697080]"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* ============================================
             TOURNAMENTS
         ============================================ */}
 
         {loading ? (
-          <div className="flex min-h-[350px] items-center justify-center bg-[#f5f5f5]">
-            <div className="text-center">
-              <div className="mx-auto h-[34px] w-[34px] animate-spin rounded-full border-[4px] border-[#dddddd] border-t-[#FFD600]" />
+  <div className="flex min-h-[350px] items-center justify-center bg-[#f5f5f5]">
+    <div className="text-center">
+      <div className="mx-auto h-[34px] w-[34px] animate-spin rounded-full border-[4px] border-[#dddddd] border-t-[#FFD600]" />
 
-              <p className="mt-4 text-[11px] font-black text-[#777777]">
-                Loading tournaments...
+      <p className="mt-4 text-[11px] font-black text-[#777777]">
+        Loading tournaments...
+      </p>
+    </div>
+  </div>
+) : selectedPlayerTab === "1v1" ? (
+
+  /* 1v1 MATCH SECTION */
+
+  <section className="bg-[#f5f5f5] px-4 pb-7 pt-5">
+
+    <div className="mb-4 flex items-center justify-between">
+      <PlayerSectionTitle title="1v1 Players" />
+
+      <span className="text-[10px] font-black text-[#777777]">
+        HEAD TO HEAD
+      </span>
+    </div>
+
+    {/* CREATE MATCH CARD */}
+
+    <div className="rounded-[18px] border border-[#e5e5e5] bg-white p-4 shadow-sm">
+
+      <div className="flex items-center gap-3">
+
+        <div className="flex h-[52px] w-[52px] items-center justify-center rounded-[14px] bg-[#111111] text-[26px]">
+          ⚔️
+        </div>
+
+        <div className="flex-1">
+          <h2 className="text-[16px] font-black text-[#111111]">
+            Create 1v1 Match
+          </h2>
+
+          <p className="mt-1 text-[9px] font-semibold text-[#888888]">
+            Challenge another eFootball player.
+          </p>
+        </div>
+
+      </div>
+
+      <div className="mt-4 rounded-[12px] bg-[#fff8d5] p-3">
+        <p className="text-[10px] font-bold leading-5 text-[#746000]">
+          Create your match request. Admin approval is required
+          before other players can join.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          setOneVsOneError("");
+          setOneVsOneSuccess("");
+          setShowCreate1v1(!showCreate1v1);
+        }}
+        className="mt-4 w-full rounded-[12px] bg-[#111111] py-[14px] text-[11px] font-black tracking-wide text-[#FFD600]"
+      >
+        {showCreate1v1 ? "CLOSE FORM" : "+ CREATE MATCH"}
+      </button>
+
+      {/* CREATE FORM */}
+
+      {showCreate1v1 && (
+        <div className="mt-5 border-t border-[#eeeeee] pt-5">
+
+          <h3 className="text-[13px] font-black text-[#111111]">
+            Match Details
+          </h3>
+
+          {/* ENTRY FEE */}
+
+          <label className="mt-5 block text-[10px] font-black uppercase text-[#777777]">
+            Select Entry Fee
+          </label>
+
+          <div className="mt-3 grid grid-cols-4 gap-2">
+
+            {Object.keys(ONE_V_ONE_REWARDS).map((amount) => {
+              const active = oneVsOneFee === amount;
+
+              return (
+                <button
+                  key={amount}
+                  type="button"
+                  onClick={() => setOneVsOneFee(amount)}
+                  className={`rounded-[10px] border-2 py-3 text-center ${
+                    active
+                      ? "border-[#111111] bg-[#FFD600] text-[#111111]"
+                      : "border-[#eeeeee] bg-white text-[#555555]"
+                  }`}
+                >
+                  <p className="text-[14px] font-black">
+                    {amount}
+                  </p>
+
+                  <p className="text-[8px] font-bold">
+                    POINTS
+                  </p>
+                </button>
+              );
+            })}
+
+          </div>
+
+          {/* REWARD */}
+
+          <div className="mt-4 flex items-center justify-between rounded-[12px] bg-[#111111] p-4">
+
+            <div>
+              <p className="text-[9px] font-bold text-white/50">
+                WINNER REWARD
+              </p>
+
+              <p className="mt-1 text-[23px] font-black text-[#FFD600]">
+                {ONE_V_ONE_REWARDS[Number(oneVsOneFee)]} P
               </p>
             </div>
+
+            <span className="text-[28px]">🏆</span>
+
           </div>
-        ) : (
-          <>
-            <TournamentSection
-              title="16 Players"
-              tournaments={
-                tournaments16
-              }
-              now={now}
-            />
 
-            <div className="h-[1px] bg-[#e8e8e8]" />
+          {/* DATE */}
 
-            <TournamentSection
-              title="8 Players"
-              tournaments={
-                tournaments8
-              }
-              now={now}
-            />
-          </>
-        )}
+          <label className="mt-5 block text-[10px] font-black uppercase text-[#777777]">
+            Match Date
+          </label>
+
+          <input
+            type="date"
+            min={getDateKey(new Date())}
+            value={oneVsOneDate}
+            onChange={(event) =>
+              setOneVsOneDate(event.target.value)
+            }
+            className="mt-2 h-[46px] w-full rounded-[11px] border border-[#dddddd] bg-white px-3 text-[12px] font-bold text-[#111111] outline-none focus:border-[#FFD600]"
+          />
+
+          {/* TIME */}
+
+          <label className="mt-4 block text-[10px] font-black uppercase text-[#777777]">
+            Match Time (IST)
+          </label>
+
+          <input
+            type="time"
+            value={oneVsOneTime}
+            onChange={(event) =>
+              setOneVsOneTime(event.target.value)
+            }
+            className="mt-2 h-[46px] w-full rounded-[11px] border border-[#dddddd] bg-white px-3 text-[12px] font-bold text-[#111111] outline-none focus:border-[#FFD600]"
+          />
+
+          {/* SUMMARY */}
+
+          <div className="mt-5 rounded-[12px] border border-[#eeeeee] p-4">
+
+            <p className="text-[10px] font-black uppercase text-[#777777]">
+              Match Summary
+            </p>
+
+            <div className="mt-3 flex justify-between">
+              <span className="text-[10px] text-[#777777]">
+                Your Entry
+              </span>
+
+              <span className="text-[11px] font-black text-[#111111]">
+                {oneVsOneFee} Points
+              </span>
+            </div>
+
+            <div className="mt-2 flex justify-between">
+              <span className="text-[10px] text-[#777777]">
+                Winner Reward
+              </span>
+
+              <span className="text-[11px] font-black text-[#16834a]">
+                {ONE_V_ONE_REWARDS[Number(oneVsOneFee)]} Points
+              </span>
+            </div>
+
+            <div className="mt-2 flex justify-between">
+              <span className="text-[10px] text-[#777777]">
+                Your Balance
+              </span>
+
+              <span className="text-[11px] font-black text-[#111111]">
+                {pointsBalance} P
+              </span>
+            </div>
+
+          </div>
+
+          {/* ERROR */}
+
+          {oneVsOneError && (
+            <p className="mt-4 rounded-[10px] bg-red-50 p-3 text-[10px] font-bold text-red-600">
+              {oneVsOneError}
+            </p>
+          )}
+
+          {/* SUCCESS */}
+
+          {oneVsOneSuccess && (
+            <p className="mt-4 rounded-[10px] bg-green-50 p-3 text-[10px] font-bold text-green-700">
+              {oneVsOneSuccess}
+            </p>
+          )}
+
+          {/* SUBMIT */}
+
+          <button
+            type="button"
+            onClick={handleCreateOneVsOneMatch}
+            disabled={creating1v1}
+            className="mt-5 w-full rounded-[12px] bg-[#FFD600] py-[15px] text-[11px] font-black text-[#111111] disabled:opacity-50"
+          >
+            {creating1v1
+              ? "CREATING REQUEST..."
+              : "CONFIRM & CREATE MATCH →"}
+          </button>
+
+        </div>
+      )}
+
+    </div>
+
+    {/* =========================================
+    AVAILABLE 1V1 MATCHES
+========================================= */}
+
+<div className="mt-6">
+
+  <div className="mb-4 flex items-center justify-between">
+
+    <h2 className="text-[14px] font-black text-[#111111]">
+      AVAILABLE MATCHES
+    </h2>
+
+    <span className="rounded-full bg-[#FFD600] px-3 py-1 text-[9px] font-black text-[#111111]">
+      {availableMatches.filter(
+        (match) =>
+          match.date === selectedDate &&
+          match.hostId !== auth.currentUser?.uid
+      ).length} OPEN
+    </span>
+
+  </div>
+
+  {joinMatchError && (
+    <p className="mb-3 rounded-lg bg-red-50 p-3 text-[10px] font-bold text-red-600">
+      {joinMatchError}
+    </p>
+  )}
+
+  {availableMatches.filter(
+    (match) =>
+      match.date === selectedDate &&
+      match.hostId !== auth.currentUser?.uid
+  ).length === 0 ? (
+
+    <div className="rounded-[16px] border border-dashed border-[#cccccc] bg-white p-7 text-center">
+
+      <div className="text-[35px]">
+        ⚔️
+      </div>
+
+      <p className="mt-3 text-[12px] font-black text-[#111111]">
+        No Available Matches
+      </p>
+
+      <p className="mt-2 text-[9px] font-medium text-[#888888]">
+        No approved 1v1 matches available for this date.
+      </p>
+
+    </div>
+
+  ) : (
+
+    <div className="space-y-4">
+
+      {availableMatches
+        .filter(
+          (match) =>
+            match.date === selectedDate &&
+            match.hostId !== auth.currentUser?.uid
+        )
+        .map((match) => (
+
+          <div
+            key={match.id}
+            className="overflow-hidden rounded-[16px] border border-[#dddddd] bg-white shadow-sm"
+          >
+
+            <div className="flex items-center justify-between bg-[#111111] px-4 py-3">
+
+              <span className="text-[11px] font-black text-[#FFD600]">
+                ⚔️ 1V1 CHALLENGE
+              </span>
+
+              <span className="rounded-full bg-green-500/15 px-3 py-1 text-[8px] font-black text-green-600">
+                OPEN
+              </span>
+
+            </div>
+
+            <div className="p-4">
+
+              {/* HOST */}
+
+              <div className="flex items-center gap-3">
+
+                <div className="flex h-[42px] w-[42px] items-center justify-center rounded-full bg-[#fff2b0] text-[20px]">
+                  👤
+                </div>
+
+                <div className="flex-1">
+
+                  <p className="text-[12px] font-black text-[#111111]">
+                    {match.hostName}
+                  </p>
+
+                  <p className="text-[9px] font-bold text-[#888888]">
+                    MATCH HOST
+                  </p>
+
+                </div>
+
+                <span className="text-[11px] font-black text-[#888888]">
+                  VS
+                </span>
+
+                <div className="flex h-[42px] w-[42px] items-center justify-center rounded-full border-2 border-dashed border-[#cccccc] text-[19px]">
+                  ❓
+                </div>
+
+              </div>
+
+              {/* MATCH DETAILS */}
+
+              <div className="mt-4 grid grid-cols-3 gap-2 rounded-[12px] bg-[#f5f5f5] p-3">
+
+                <div>
+                  <p className="text-[8px] font-bold text-[#999999]">
+                    ENTRY FEE
+                  </p>
+
+                  <p className="mt-1 text-[14px] font-black text-[#111111]">
+                    {match.entryFee} P
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[8px] font-bold text-[#999999]">
+                    WINNER GETS
+                  </p>
+
+                  <p className="mt-1 text-[14px] font-black text-green-600">
+                    {match.winnerReward} P
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[8px] font-bold text-[#999999]">
+                    MATCH TIME
+                  </p>
+
+                  <p className="mt-1 text-[11px] font-black text-[#111111]">
+                    {formatTime12Hour(match.time)}
+                  </p>
+                </div>
+
+              </div>
+
+              <p className="mt-3 text-center text-[9px] font-bold text-[#777777]">
+                📅 {formatDate(match.date)}
+              </p>
+
+              {/* JOIN */}
+
+              <button
+                type="button"
+                onClick={() =>
+                  handleJoinOneVsOneMatch(match)
+                }
+                disabled={
+                  !!joiningMatchId ||
+                  pointsBalance < match.entryFee
+                }
+                className="mt-4 w-full rounded-[11px] bg-[#FFD600] py-[14px] text-[11px] font-black text-[#111111] transition active:scale-[0.98] disabled:bg-[#dddddd] disabled:text-[#999999]"
+              >
+
+                {joiningMatchId === match.id
+                  ? "JOINING MATCH..."
+                  : pointsBalance < match.entryFee
+                  ? "INSUFFICIENT POINTS"
+                  : "JOIN MATCH →"}
+
+              </button>
+
+            </div>
+
+          </div>
+
+        ))}
+
+    </div>
+
+  )}
+
+</div>
+
+    {/* PENDING INFO */}
+
+    <div className="mt-4 rounded-[13px] border border-[#e5e5e5] bg-white p-4">
+
+      <p className="text-[11px] font-black text-[#111111]">
+        How it works
+      </p>
+
+      <div className="mt-3 space-y-3 text-[9px] font-semibold text-[#777777]">
+        <p>① Create your match request.</p>
+        <p>② Admin reviews and approves your request.</p>
+        <p>③ Another player joins your match.</p>
+        <p>④ Both players' entry fees are deducted after joining.</p>
+        <p>⑤ Winner receives the reward after admin verifies the result.</p>
+      </div>
+
+    </div>
+
+  </section>
+
+) : (
+  <TournamentSection
+    key={selectedPlayerTab}
+    title={
+      PLAYER_TABS.find(
+        (tab) => tab.key === selectedPlayerTab
+      )?.label || "Players"
+    }
+    tournaments={selectedPlayerTournaments}
+    now={now}
+  />
+)}
 
         {/* ============================================
             BOTTOM NAVIGATION

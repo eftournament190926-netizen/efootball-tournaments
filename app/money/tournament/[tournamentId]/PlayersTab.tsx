@@ -41,7 +41,6 @@ type Registration = {
   username?: string;
   profilePhoto?: string;
   status?: string;
-
   createdAt?: {
     seconds: number;
     nanoseconds: number;
@@ -62,36 +61,17 @@ type Props = {
    PLAYERS TAB
 ================================================= */
 
-export default function PlayersTab({
-  tournament,
-}: Props) {
-  const [players, setPlayers] =
-    useState<Player[]>([]);
+export default function PlayersTab({ tournament }: Props) {
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [roomCode, setRoomCode] = useState(tournament.roomCode || "");
+  const [roomCodeA, setRoomCodeA] = useState(tournament.roomCodeA || "");
+  const [roomCodeB, setRoomCodeB] = useState(tournament.roomCodeB || "");
 
-  /* =================================================
-     ROOM CODES
-  ================================================= */
-
-  const [roomCode, setRoomCode] =
-    useState(
-      tournament.roomCode || ""
-    );
-
-  const [roomCodeA, setRoomCodeA] =
-    useState(
-      tournament.roomCodeA || ""
-    );
-
-  const [roomCodeB, setRoomCodeB] =
-    useState(
-      tournament.roomCodeB || ""
-    );
-
-  const is16Players =
-    tournament.maxPlayers === 16;
+  const is4Players = tournament.maxPlayers === 4;
+  const is8Players = tournament.maxPlayers === 8;
+  const is16Players = tournament.maxPlayers === 16;
 
   /* =================================================
      REALTIME ROOM CODE LISTENER
@@ -100,136 +80,82 @@ export default function PlayersTab({
   useEffect(() => {
     const tournamentRef = doc(
       db,
-      "tournaments",
+      "moneyTournaments",
       tournament.id
     );
 
-  
-    const unsubscribe =
-      onSnapshot(
-        tournamentRef,
+    const unsubscribe = onSnapshot(
+      tournamentRef,
+      (snapshot) => {
+        if (!snapshot.exists()) return;
 
-        (snapshot) => {
-          if (!snapshot.exists()) {
-            return;
-          }
+        const data = snapshot.data();
 
-          const tournamentRef = doc(
-  db,
-  "moneyTournaments",
-  tournament.id
-);
+        setRoomCode(data.roomCode || "");
+        setRoomCodeA(data.roomCodeA || "");
+        setRoomCodeB(data.roomCodeB || "");
+      },
+      (error) => {
+        console.error("Failed to listen to room code:", error);
+      }
+    );
 
-
-          const data =
-            snapshot.data();
-
-          setRoomCode(
-            data.roomCode || ""
-          );
-
-          setRoomCodeA(
-            data.roomCodeA || ""
-          );
-
-          setRoomCodeB(
-            data.roomCodeB || ""
-          );
-        },
-
-        (error) => {
-          console.error(
-            "Failed to listen to tournament updates:",
-            error
-          );
-        }
-      );
-
-    return () =>
-      unsubscribe();
+    return () => unsubscribe();
   }, [tournament.id]);
 
   /* =================================================
-     LOAD PLAYERS
+     LOAD REGISTERED PLAYERS
   ================================================= */
 
-  
-useEffect(() => {
-  let cancelled = false;
+  useEffect(() => {
+    let cancelled = false;
 
-  async function loadPlayers() {
-    try {
-      setLoading(true);
+    async function loadPlayers() {
+      try {
+        setLoading(true);
 
-      const registrationsQuery = query(
-        collection(db, "moneyTournamentRegistrations"),
-        where("tournamentId", "==", tournament.id)
-      );
-
-      const snapshot = await getDocs(registrationsQuery);
-
-      const registrations: Registration[] = snapshot.docs
-        .map((document) => ({
-          id: document.id,
-          ...(document.data() as Omit<Registration, "id">),
-        }))
-        .filter(
-          (registration) =>
-            !registration.status ||
-            registration.status.toLowerCase() === "confirmed"
-        )
-        .sort(
-          (a, b) =>
-            (a.createdAt?.seconds ?? 0) -
-            (b.createdAt?.seconds ?? 0)
+        const registrationsQuery = query(
+          collection(db, "moneyTournamentRegistrations"),
+          where("tournamentId", "==", tournament.id)
         );
 
-      const loadedPlayers: Player[] = [];
-      const seenUsers = new Set<string>();
+        const snapshot = await getDocs(registrationsQuery);
 
-      for (const registration of registrations) {
-        const uid =
-          registration.userId || registration.uid || "";
+        const registrations: Registration[] = snapshot.docs
+          .map((document) => ({
+            id: document.id,
+            ...(document.data() as Omit<Registration, "id">),
+          }))
+          .filter(
+            (registration) =>
+              !registration.status ||
+              registration.status.toLowerCase() === "confirmed"
+          )
+          .sort(
+            (a, b) =>
+              (a.createdAt?.seconds ?? 0) -
+              (b.createdAt?.seconds ?? 0)
+          );
 
-        const playerId = uid || registration.id;
+        const loadedPlayers: Player[] = [];
+        const seenUsers = new Set<string>();
 
-        if (seenUsers.has(playerId)) continue;
-        seenUsers.add(playerId);
+        for (const registration of registrations) {
+          const uid = registration.userId || registration.uid || "";
+          const playerId = uid || registration.id;
 
-        let username = registration.username || "";
-        let profilePhoto = registration.profilePhoto || "";
+          if (seenUsers.has(playerId)) continue;
+          seenUsers.add(playerId);
 
-        if (uid && (!username || !profilePhoto)) {
-          try {
-            // First try users/{uid}
-            const userDoc = await getDoc(
-              doc(db, "users", uid)
-            );
+          let username = registration.username || "";
+          let profilePhoto = registration.profilePhoto || "";
 
-            if (userDoc.exists()) {
-              const data = userDoc.data();
+          if (uid && (!username || !profilePhoto)) {
+            try {
+              const userDoc = await getDoc(doc(db, "users", uid));
 
-              username =
-                username ||
-                data.username ||
-                data.eFootballUsername ||
-                "";
-
-              profilePhoto =
-                profilePhoto ||
-                data.profilePhoto ||
-                "";
-            } else {
-              // Fallback: users collection with uid field
-              const userQuery = query(
-                collection(db, "users"),
-                where("uid", "==", uid)
-              );
-
-              const userSnapshot = await getDocs(userQuery);
-
-              if (!userSnapshot.empty) {
-                const data = userSnapshot.docs[0].data();
+              if (userDoc.exists()) {
+                const data = userDoc.data();
 
                 username =
                   username ||
@@ -241,96 +167,83 @@ useEffect(() => {
                   profilePhoto ||
                   data.profilePhoto ||
                   "";
+              } else {
+                const userQuery = query(
+                  collection(db, "users"),
+                  where("uid", "==", uid)
+                );
+
+                const userSnapshot = await getDocs(userQuery);
+
+                if (!userSnapshot.empty) {
+                  const data = userSnapshot.docs[0].data();
+
+                  username =
+                    username ||
+                    data.username ||
+                    data.eFootballUsername ||
+                    "";
+
+                  profilePhoto =
+                    profilePhoto ||
+                    data.profilePhoto ||
+                    "";
+                }
               }
+            } catch (error) {
+              console.error("Failed to load player profile:", uid, error);
             }
-          } catch (error) {
-            console.error(
-              "Failed to load user profile:",
-              uid,
-              error
-            );
           }
+
+          loadedPlayers.push({
+            id: playerId,
+            username: username || "Player",
+            profilePhoto,
+          });
         }
 
-        loadedPlayers.push({
-          id: playerId,
-          username: username || "Player",
-          profilePhoto,
-        });
-      }
+        if (!cancelled) {
+          // Show only the tournament's allowed player count.
+          setPlayers(loadedPlayers.slice(0, tournament.maxPlayers));
+        }
+      } catch (error) {
+        console.error("Failed to load tournament players:", error);
 
-      if (!cancelled) {
-        setPlayers(loadedPlayers);
-      }
-    } catch (error) {
-      console.error(
-        "Failed to load money tournament players:",
-        error
-      );
-
-      if (!cancelled) {
-        setPlayers([]);
-      }
-    } finally {
-      if (!cancelled) {
-        setLoading(false);
+        if (!cancelled) {
+          setPlayers([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
-  }
 
-  loadPlayers();
+    loadPlayers();
 
-  return () => {
-    cancelled = true;
-  };
-}, [tournament.id]);
-
+    return () => {
+      cancelled = true;
+    };
+  }, [tournament.id, tournament.maxPlayers]);
 
   /* =================================================
-     POOL A
+     PLAYER POOLS
   ================================================= */
 
   const poolA = useMemo(() => {
-    return players.slice(0, 8);
-  }, [players]);
-
-  /* =================================================
-     POOL B
-  ================================================= */
+    return players.slice(0, is4Players ? 4 : 8);
+  }, [players, is4Players]);
 
   const poolB = useMemo(() => {
-    if (!is16Players) {
-      return [];
-    }
-
-    return players.slice(
-      8,
-      16
-    );
-  }, [
-    players,
-    is16Players,
-  ]);
-
-  /* =================================================
-     ROOM CODE PRIORITY
-
-     Pool A:
-     roomCodeA -> roomCode -> placeholder
-
-     Pool B:
-     roomCodeB -> roomCode -> placeholder
-  ================================================= */
+    if (!is16Players) return [];
+    return players.slice(8, 16);
+  }, [players, is16Players]);
 
   const displayRoomCodeA =
-    roomCodeA ||
-    roomCode ||
-    "Room Code";
+    roomCodeA || roomCode || "Room Code";
 
   const displayRoomCodeB =
-    roomCodeB ||
-    roomCode ||
-    "Room Code";
+    roomCodeB || roomCode || "Room Code";
 
   /* =================================================
      LOADING
@@ -340,13 +253,11 @@ useEffect(() => {
     return (
       <div className="bg-white px-4 py-10">
         <div className="flex flex-col items-center justify-center">
-
           <div className="h-8 w-8 animate-spin rounded-full border-[4px] border-[#eeeeee] border-t-[#FFD600]" />
 
           <p className="mt-3 text-[11px] font-black text-[#777777]">
             Loading players...
           </p>
-
         </div>
       </div>
     );
@@ -359,56 +270,40 @@ useEffect(() => {
   return (
     <div className="bg-white px-3 pb-6 pt-5">
 
-      {/* ============================================
-          16 PLAYERS
-      ============================================ */}
+      {/* 16 PLAYERS */}
 
       {is16Players ? (
         <div className="grid grid-cols-2 gap-3">
-
-          {/* POOL A */}
-
           <PlayerPool
             title="Pool A"
-            roomCode={
-              displayRoomCodeA
-            }
+            roomCode={displayRoomCodeA}
             players={poolA}
             startNumber={1}
+            slotCount={8}
           />
-
-          {/* POOL B */}
 
           <PlayerPool
             title="Pool B"
-            roomCode={
-              displayRoomCodeB
-            }
+            roomCode={displayRoomCodeB}
             players={poolB}
             startNumber={9}
+            slotCount={8}
           />
-
         </div>
       ) : (
 
-        /* ==========================================
-           8 PLAYERS
-        ========================================== */
+        /* 4 OR 8 PLAYERS */
 
         <div className="w-full">
-
           <PlayerPool
             title="Players"
-            roomCode={
-              displayRoomCodeA
-            }
+            roomCode={displayRoomCodeA}
             players={poolA}
             startNumber={1}
+            slotCount={is4Players ? 4 : 8}
           />
-
         </div>
       )}
-
     </div>
   );
 }
@@ -422,105 +317,66 @@ function PlayerPool({
   roomCode,
   players,
   startNumber,
+  slotCount,
 }: {
   title: string;
   roomCode: string;
   players: Player[];
   startNumber: number;
+  slotCount: number;
 }) {
-  /* Always display 8 slots */
-
-  const slots =
-    Array.from(
-      { length: 8 },
-      (_, index) => {
-        return (
-          players[index] ||
-          null
-        );
-      }
-    );
+  const slots = Array.from(
+    { length: slotCount },
+    (_, index) => players[index] || null
+  );
 
   return (
     <div className="min-w-0 overflow-hidden rounded-[15px] border border-[#e5e5e5] bg-white shadow-[0_3px_12px_rgba(0,0,0,0.05)]">
 
-      {/* ============================================
-          POOL HEADER
-      ============================================ */}
+      {/* HEADER */}
 
       <div className="relative overflow-hidden bg-[#111111] px-3 py-[12px]">
-
         <div className="relative z-10 flex items-center justify-center gap-[7px]">
-
-          {/* PLAYERS ICON */}
-
-          <span className="text-[15px] leading-none">
-            👥
-          </span>
-
-          {/* TITLE */}
+          <span className="text-[15px] leading-none">👥</span>
 
           <span className="text-[15px] font-black leading-none text-[#FFD600]">
             {title}
           </span>
-
         </div>
 
-        {/* YELLOW DIAGONAL ACCENT */}
-
         <div className="absolute -right-[9px] -top-[12px] h-[70px] w-[23px] rotate-[22deg] bg-[#FFD600]" />
-
       </div>
 
-      {/* ============================================
-          ROOM CODE
-      ============================================ */}
+      {/* ROOM CODE */}
 
       <div className="px-2.5 pt-3">
-
         <div className="overflow-hidden rounded-[9px] border border-[#111111] bg-[#FFD600]">
-
           <div className="bg-[#111111] py-[4px] text-center text-[7px] font-black uppercase tracking-[0.15em] text-[#FFD600]">
             Room Code
           </div>
 
           <div className="flex h-[32px] items-center justify-center px-2">
-
             <span className="block max-w-full truncate text-[12px] font-black tracking-[0.04em] text-[#111111]">
-              {roomCode ||
-                "Room Code"}
+              {roomCode || "Room Code"}
             </span>
-
           </div>
         </div>
-
       </div>
 
-      {/* ============================================
-          PLAYERS
-      ============================================ */}
+      {/* PLAYERS */}
 
       <div className="space-y-[3px] px-2 pb-3 pt-3">
+        {slots.map((player, index) => {
+          const number = startNumber + index;
 
-        {slots.map(
-          (player, index) => {
-            const number =
-              startNumber +
-              index;
-
-            return (
-              <PlayerRow
-                key={`${number}-${
-                  player?.id ||
-                  "empty"
-                }`}
-                number={number}
-                player={player}
-              />
-            );
-          }
-        )}
-
+          return (
+            <PlayerRow
+              key={`${number}-${player?.id || "empty"}`}
+              number={number}
+              player={player}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -537,68 +393,37 @@ function PlayerRow({
   number: number;
   player: Player | null;
 }) {
-  /* =================================================
-     EMPTY SLOT
-  ================================================= */
-
   if (!player) {
     return (
       <div className="flex min-h-[40px] min-w-0 items-center rounded-[8px] bg-[#f6f6f6] px-[5px]">
-
-        {/* NUMBER */}
-
         <div className="flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full bg-[#e7e7e7] text-[10px] font-black text-[#888888]">
           {number}
         </div>
 
-        {/* PROFILE */}
-
         <div className="mx-[6px] flex h-[29px] w-[29px] shrink-0 items-center justify-center rounded-full border border-[#dddddd] bg-white">
-
-          <span className="text-[11px] opacity-40">
-            👤
-          </span>
-
+          <span className="text-[11px] opacity-40">👤</span>
         </div>
 
-        {/* EMPTY */}
-
         <div className="min-w-0 flex-1 overflow-hidden">
-
           <span className="block truncate text-[10px] font-bold text-[#b0b0b0]">
             Empty Slot
           </span>
-
         </div>
       </div>
     );
   }
 
-  /* =================================================
-     REGISTERED PLAYER
-  ================================================= */
-
   return (
     <div className="flex min-h-[40px] min-w-0 items-center rounded-[8px] border border-[#f0f0f0] bg-white px-[5px] transition">
-
-      {/* NUMBER */}
-
       <div className="flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full bg-[#FFD600] text-[10px] font-black text-[#111111]">
         {number}
       </div>
 
-      {/* PROFILE */}
-
       <div className="mx-[6px] h-[30px] w-[30px] shrink-0 overflow-hidden rounded-full border-2 border-[#FFD600] bg-white">
-
         {player.profilePhoto ? (
           <img
-            src={
-              player.profilePhoto
-            }
-            alt={
-              player.username
-            }
+            src={player.profilePhoto}
+            alt={player.username}
             className="h-full w-full object-cover"
           />
         ) : (
@@ -606,17 +431,12 @@ function PlayerRow({
             👤
           </div>
         )}
-
       </div>
 
-      {/* USERNAME */}
-
       <div className="min-w-0 flex-1 overflow-hidden">
-
         <span className="block truncate text-[11px] font-black leading-none text-[#111111]">
           {player.username}
         </span>
-
       </div>
     </div>
   );
